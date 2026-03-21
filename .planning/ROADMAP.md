@@ -30,7 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The `EventBus` can accept subscribers and emit typed events without any game-specific code
   4. A `GameLog` Zod schema validates a complete game log entry including `gameId`, `roundId`, `playerId`, `role`, `publicStatement`, `privateReasoning`, and `timestamp`
   5. A typed `GameConfig` interface captures seed, role setup, model assignments, and personas for reproducible runs
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffolding + core types (branded GameState/PlayerView, Game/Player interfaces, GameConfig, GameOutcome)
+- [ ] 01-02-PLAN.md — Event system + logging (GameEvent Zod union, EventBus, Recorder, GameLogEntry schema)
 
 ### Phase 2: Avalon Rules
 **Goal**: A complete Avalon game runs to a valid end state when given deterministic player inputs — no LLMs required
@@ -84,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Model | 0/TBD | Not started | - |
+| 1. Data Model | 0/2 | Planning complete | - |
 | 2. Avalon Rules | 0/TBD | Not started | - |
 | 3. LLM Agents | 0/TBD | Not started | - |
 | 4. CLI Runner | 0/TBD | Not started | - |
