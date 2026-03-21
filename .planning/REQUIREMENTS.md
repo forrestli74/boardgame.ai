@@ -85,37 +85,37 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRAME-01 | — | Pending |
-| FRAME-02 | — | Pending |
-| FRAME-03 | — | Pending |
-| AVLN-01 | — | Pending |
-| AVLN-02 | — | Pending |
-| AVLN-03 | — | Pending |
-| AVLN-04 | — | Pending |
-| AVLN-05 | — | Pending |
-| AVLN-06 | — | Pending |
-| AVLN-07 | — | Pending |
-| AVLN-08 | — | Pending |
-| AGENT-01 | — | Pending |
-| AGENT-02 | — | Pending |
-| AGENT-03 | — | Pending |
-| AGENT-04 | — | Pending |
-| AGENT-05 | — | Pending |
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| DATA-04 | — | Pending |
-| EXEC-01 | — | Pending |
-| EXEC-02 | — | Pending |
-| EXEC-03 | — | Pending |
-| DISC-01 | — | Pending |
-| DISC-02 | — | Pending |
+| FRAME-01 | Phase 1 | Pending |
+| FRAME-02 | Phase 1 | Pending |
+| FRAME-03 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Pending |
+| DATA-02 | Phase 1 | Pending |
+| DATA-03 | Phase 1 | Pending |
+| AVLN-01 | Phase 2 | Pending |
+| AVLN-02 | Phase 2 | Pending |
+| AVLN-03 | Phase 2 | Pending |
+| AVLN-04 | Phase 2 | Pending |
+| AVLN-05 | Phase 2 | Pending |
+| AVLN-06 | Phase 2 | Pending |
+| AVLN-07 | Phase 2 | Pending |
+| AVLN-08 | Phase 2 | Pending |
+| AGENT-01 | Phase 3 | Pending |
+| AGENT-02 | Phase 3 | Pending |
+| AGENT-03 | Phase 3 | Pending |
+| AGENT-04 | Phase 3 | Pending |
+| AGENT-05 | Phase 3 | Pending |
+| DISC-01 | Phase 3 | Pending |
+| DISC-02 | Phase 3 | Pending |
+| EXEC-01 | Phase 4 | Pending |
+| DATA-04 | Phase 4 | Pending |
+| EXEC-02 | Phase 5 | Pending |
+| EXEC-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after initial definition*
+*Last updated: 2026-03-21 after roadmap creation*
