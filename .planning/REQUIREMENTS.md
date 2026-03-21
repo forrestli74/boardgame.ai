@@ -43,6 +43,11 @@
 - [ ] **EXEC-02**: Batch mode — run N games in parallel with configurable concurrency
 - [ ] **EXEC-03**: Batch output organized by run (directory per batch, file per game)
 
+### Discussion
+
+- [ ] **DISC-01**: Simplified discussion phase — each player makes one statement per round before voting
+- [ ] **DISC-02**: Discussion statements visible to all players and captured in game log
+
 ## v2 Requirements
 
 ### Analysis
@@ -57,7 +62,7 @@
 
 ### Communication
 
-- **COMM-01**: Discussion phase — players make statements before voting (configurable rounds)
+- **COMM-01**: Full discussion phase — multi-round back-and-forth conversation before voting
 - **COMM-02**: Configurable discussion depth (0, 1, or N rounds per game phase)
 
 ### Extensibility
@@ -103,11 +108,13 @@
 | EXEC-01 | — | Pending |
 | EXEC-02 | — | Pending |
 | EXEC-03 | — | Pending |
+| DISC-01 | — | Pending |
+| DISC-02 | — | Pending |
 
 **Coverage:**
-- v1 requirements: 23 total
+- v1 requirements: 25 total
 - Mapped to phases: 0
-- Unmapped: 23 ⚠️
+- Unmapped: 25 ⚠️
 
 ---
 *Requirements defined: 2026-03-21*
