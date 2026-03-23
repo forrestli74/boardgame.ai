@@ -7,8 +7,8 @@
 
 ### Game Framework
 
-- [ ] **FRAME-01**: Game-agnostic engine interface with generic state and action types
-- [ ] **FRAME-02**: Pluggable player interface — any player type implements the same protocol
+- [ ] **FRAME-01**: Game-agnostic engine interface — Game as state machine, Engine as mediator, no generics
+- [ ] **FRAME-02**: Pluggable player interface — `act(request: ActionRequest): Promise<unknown>`, not generic
 - [ ] **FRAME-03**: Event-based game logging decoupled from game loop
 
 ### Avalon Rules
@@ -33,8 +33,8 @@
 ### Data & Logging
 
 - [ ] **DATA-01**: Structured JSONL game log with event schema (turn, phase, player, action, reasoning)
-- [ ] **DATA-02**: Post-game outcome record (faction winner, per-player role, Merlin assassination result)
-- [ ] **DATA-03**: Reproducible game configs (seed, role setup, model assignments, personas)
+- [ ] **DATA-02**: Post-game outcome record — `scores: Record<string, number>` with optional metadata
+- [ ] **DATA-03**: Reproducible game configs — `GameConfig` with seed, players, `options: unknown` validated by game's `optionsSchema`
 - [ ] **DATA-04**: AI-generated post-game summary narrative
 
 ### Execution

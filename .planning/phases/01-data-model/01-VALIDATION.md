@@ -5,6 +5,7 @@ status: draft
 nyquist_compliant: false
 wave_0_complete: false
 created: 2026-03-21
+updated: 2026-03-22
 ---
 
 # Phase 1 — Validation Strategy
@@ -38,17 +39,10 @@ created: 2026-03-21
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 01-01-01 | 01 | 0 | FRAME-01 | unit (type-level) | `pnpm tsc --noEmit` | ❌ W0 | ⬜ pending |
-| 01-01-02 | 01 | 0 | FRAME-01 | unit | `pnpm vitest run src/core/game.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-03 | 01 | 0 | FRAME-02 | unit | `pnpm vitest run src/core/player.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-04 | 01 | 0 | FRAME-03 | unit | `pnpm vitest run src/core/event-bus.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-05 | 01 | 0 | FRAME-03 | integration | `pnpm vitest run src/logging/recorder.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-06 | 01 | 0 | DATA-01 | unit | `pnpm vitest run src/core/events.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-07 | 01 | 0 | DATA-01 | unit | `pnpm vitest run src/core/events.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-08 | 01 | 0 | DATA-01 | integration | `pnpm vitest run src/logging/recorder.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-09 | 01 | 0 | DATA-02 | unit | `pnpm vitest run src/core/types.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-10 | 01 | 0 | DATA-03 | unit | `pnpm vitest run src/core/types.test.ts` | ❌ W0 | ⬜ pending |
-| 01-01-11 | 01 | 0 | DATA-03 | unit | `pnpm vitest run src/core/types.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-01 | 01 | 1 | — | setup | `pnpm typecheck` | ❌ W0 | ⬜ pending |
+| 01-01-02 | 01 | 1 | FRAME-01, DATA-02, DATA-03 | unit | `pnpm vitest run src/core/types.test.ts src/core/game.test.ts src/core/player.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-03 | 01 | 1 | DATA-01 | unit | `pnpm vitest run src/core/events.test.ts` | ❌ W0 | ⬜ pending |
+| 01-01-04 | 01 | 1 | FRAME-01, FRAME-02, FRAME-03 | unit | `pnpm vitest run src/core/engine.test.ts src/core/recorder.test.ts` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,12 +51,12 @@ created: 2026-03-21
 ## Wave 0 Requirements
 
 - [ ] `vitest.config.ts` — framework config
-- [ ] `src/core/events.test.ts` — stubs for DATA-01, FRAME-03
-- [ ] `src/core/types.test.ts` — stubs for DATA-02, DATA-03
-- [ ] `src/core/game.test.ts` — stubs for FRAME-01
-- [ ] `src/core/player.test.ts` — stubs for FRAME-02
-- [ ] `src/core/event-bus.test.ts` — stubs for FRAME-03 EventBus
-- [ ] `src/logging/recorder.test.ts` — stubs for FRAME-03 Recorder, DATA-01 JSONL
+- [ ] `src/core/types.test.ts` — stubs for FRAME-01, DATA-02, DATA-03
+- [ ] `src/core/events.test.ts` — stubs for DATA-01
+- [ ] `src/core/game.test.ts` — stubs for FRAME-01 Game interface
+- [ ] `src/core/player.test.ts` — stubs for FRAME-02 Player interface
+- [ ] `src/core/engine.test.ts` — stubs for FRAME-01 Engine mediator
+- [ ] `src/core/recorder.test.ts` — stubs for FRAME-03 Recorder JSONL
 - [ ] `package.json` test scripts: `"test": "vitest run"`, `"typecheck": "tsc --noEmit"`
 - [ ] Framework install: `pnpm add -D vitest @types/node`
 
@@ -70,9 +64,7 @@ created: 2026-03-21
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| `GameState` not assignable to `PlayerView` | FRAME-01 | Compile-time type check | Run `pnpm tsc --noEmit` — verify type error when passing GameState as PlayerView |
+*All phase behaviors have automated verification.*
 
 ---
 

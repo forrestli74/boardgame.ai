@@ -25,16 +25,18 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (first phase)
 **Requirements**: FRAME-01, FRAME-02, FRAME-03, DATA-01, DATA-02, DATA-03
 **Success Criteria** (what must be TRUE):
-  1. A `PlayerView` type exists that is structurally distinct from `GameState` — passing `GameState` where `PlayerView` is expected is a TypeScript compile error
-  2. A typed `GameEvent` schema with Zod validation covers every event type (turn, phase transition, action, reasoning, outcome)
-  3. The `EventBus` can accept subscribers and emit typed events without any game-specific code
-  4. A `GameLog` Zod schema validates a complete game log entry including `gameId`, `roundId`, `playerId`, `role`, `publicStatement`, `privateReasoning`, and `timestamp`
-  5. A typed `GameConfig` interface captures seed, role setup, model assignments, and personas for reproducible runs
-**Plans:** 2 plans
+  1. A `Game` interface (no generics) exists as a state machine — `init` and `handleResponse` return `GameResponse { requests: ActionRequest[], events: GameEvent[] }`, has `optionsSchema` for game-specific config validation
+  2. An `ActionRequest` type exists with readonly `playerId`, `view: unknown`, and `actionSchema: ZodSchema`
+  3. A `Player` interface exists with `act(request: ActionRequest): Promise<unknown>` — not generic
+  4. An `Engine` class mediates between Game and Player — tracks pending requests (diffs against game's full request list), validates responses via schema with retry, records events via Recorder, handles parallel player actions via `Promise.race`
+  5. A `GameEvent` Zod schema with two source types: `source: 'player'` (with playerId, data, reasoning) and `source: 'game'` (with data)
+  6. A `Recorder` class writes JSONL via Pino, called directly by Engine (no EventBus)
+  7. A typed `GameConfig` with Zod validation captures seed, players (model, persona), and `options: unknown` for game-specific config
+  8. A `GameOutcome` type uses `scores: Record<string, number>` with optional metadata
+**Plans**: 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Project scaffolding + core types (branded GameState/PlayerView, Game/Player interfaces, GameConfig, GameOutcome)
-- [ ] 01-02-PLAN.md — Event system + logging (GameEvent Zod union, EventBus, Recorder, GameLogEntry schema)
+- [ ] 01-01-PLAN.md — Core types, event schema, engine, and recorder
 
 ### Phase 2: Avalon Rules
 **Goal**: A complete Avalon game runs to a valid end state when given deterministic player inputs — no LLMs required
@@ -88,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Model | 0/2 | Planning complete | - |
+| 1. Data Model | 0/1 | Planning complete | - |
 | 2. Avalon Rules | 0/TBD | Not started | - |
 | 3. LLM Agents | 0/TBD | Not started | - |
 | 4. CLI Runner | 0/TBD | Not started | - |

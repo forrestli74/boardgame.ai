@@ -43,23 +43,18 @@
 ## Installation
 
 ```bash
-# Core runtime
-pnpm add ai @ai-sdk/openai @ai-sdk/anthropic @ai-sdk/google zod
-
-# CLI
-pnpm add commander @clack/prompts
-
-# Logging
-pnpm add pino
-
-# Concurrency (batch mode)
-pnpm add p-limit
-
-# Env
-pnpm add dotenv
-
-# Dev dependencies
+# Phase 1: Core types + logging
+pnpm add zod pino
 pnpm add -D typescript tsx vitest pino-pretty @types/node
+
+# Phase 3 (LLM agents): AI SDK
+# pnpm add ai @ai-sdk/openai @ai-sdk/anthropic @ai-sdk/google
+
+# Phase 4 (CLI):
+# pnpm add commander @clack/prompts dotenv
+
+# Phase 5 (Batch):
+# pnpm add p-limit
 ```
 
 ## Alternatives Considered

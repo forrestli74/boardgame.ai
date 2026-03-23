@@ -85,7 +85,7 @@ Per-agent belief state logging
 
 - **Batch mode requires CLI:** Batch config must be expressible as a file passed to CLI, not interactive input.
 - **Reasoning trace requires player protocol:** The protocol must include a reasoning field in the returned action object, not just the action decision. LLM players populate it; algorithmic players can leave it null.
-- **Game-agnostic interface enhances extensibility but is not required for Avalon MVP:** Design it as an abstraction layer from day one to avoid costly refactoring, but Avalon drives the interface shape.
+- **Game-agnostic interface via `unknown` boundaries, not generics:** The `Game` and `Player` interfaces use `unknown` at boundaries with Zod schema validation — game-agnostic without type parameters.
 - **Belief state logging conflicts with performance:** Full per-turn belief state serialization adds latency per decision. Make it opt-in via flag.
 
 ## MVP Definition

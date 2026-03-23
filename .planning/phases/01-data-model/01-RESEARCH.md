@@ -18,10 +18,15 @@
 - Event schema must be game-agnostic — no Avalon-specific fields in the core types
 - Discussion is an action type (same event schema as other actions like vote, propose, quest)
 
-**Player View Boundary**
-- Compile-time enforcement — `GameState` and `PlayerView` are structurally separate TypeScript types
-- Passing `GameState` where `PlayerView` is expected must be a compile error
-- Exact fields TBD during implementation — the decision here is the type separation approach, not the specific fields
+**Type System**
+- No generics in framework types — all runtime-resolved, Zod validates
+- Game as state machine with internal state — `init()` returns `ActionRequest[]`, `handleResponse()` returns new `ActionRequest[]`
+- Player not generic — `act(request: ActionRequest): Promise<unknown>`
+- ActionRequest: `{ playerId, view: unknown, actionSchema: ZodSchema }`
+- Engine as mediator — tracks pending requests, validates, logs
+- PlayerView is per-game, passed as `unknown` through ActionRequest
+- GameOutcome uses `scores: Record<string, number>`
+- GameConfig has `options: unknown` validated by game's `optionsSchema`
 
 **Game Config Format**
 - JSON format (can migrate to YAML later if needed)
@@ -37,8 +42,6 @@
 
 ### Claude's Discretion
 - EventBus implementation details
-- Outcome record exact structure
-- PlayerView and GameState exact field definitions (guided by Avalon needs in Phase 2)
 - Log file naming and directory conventions
 
 ### Deferred Ideas (OUT OF SCOPE)
@@ -52,23 +55,21 @@ None — discussion stayed within phase scope
 
 | ID | Description | Research Support |
 |----|-------------|-----------------|
-| FRAME-01 | Game-agnostic engine interface with generic state and action types | Generic `Game<S, A>` interface pattern; TypeScript 5.x generics; structural separation via distinct types |
-| FRAME-02 | Pluggable player interface — any player type implements the same protocol | `Player<S, A>` interface pattern; `act(view, validActions): Promise<A>` signature |
+| FRAME-01 | Game-agnostic engine interface — Game as state machine, Engine as mediator, no generics | `Game` interface with `init()`/`handleResponse()` returning `ActionRequest[]`; `Engine` as mediator routing between Game and Player |
+| FRAME-02 | Pluggable player interface — any player type implements the same protocol | `Player` interface; `act(request: ActionRequest): Promise<unknown>` signature; not generic |
 | FRAME-03 | Event-based game logging decoupled from game loop | EventBus pub/sub pattern; Pino child loggers; Recorder as passive EventBus subscriber |
 | DATA-01 | Structured JSONL game log with event schema (turn, phase, player, action, reasoning) | Pino v10 NDJSON output; Zod v4 discriminated union for GameEvent; schema-first design |
-| DATA-02 | Post-game outcome record (faction winner, per-player role, Merlin assassination result) | Plain typed interface at `core/types.ts`; emitted as a terminal `game-ended` event |
-| DATA-03 | Reproducible game configs (seed, role setup, model assignments, personas) | Zod v4 object schema with required `seed: number` field; JSON format; validated at load time |
+| DATA-02 | Post-game outcome record — `scores: Record<string, number>` with optional metadata | `GameOutcomeSchema` Zod schema; emitted as terminal `game-ended` event |
+| DATA-03 | Reproducible game configs — seed, players, `options: unknown` validated by game | `GameConfigSchema` Zod schema; `options` validated by `game.optionsSchema` |
 </phase_requirements>
 
 ---
 
 ## Summary
 
-Phase 1 is a pure TypeScript types-and-schemas phase. No runtime logic beyond the EventBus and Recorder. The deliverable is a locked type system that all subsequent phases consume without modification. The two most consequential decisions are: (1) how to enforce compile-time separation between `GameState` and `PlayerView`, and (2) how to structure the `GameEvent` discriminated union so Zod validation and TypeScript narrowing work together cleanly.
+Phase 1 defines the core type system, engine loop, and event/logging infrastructure. No generics in framework types — all boundaries use `unknown` with Zod validation at runtime. The key deliverables are: (1) Game as a state machine that produces ActionRequests and reacts to responses, (2) Engine as a mediator that routes between Game and Player, and (3) GameEvent discriminated union for dev logging.
 
-The existing architecture research (ARCHITECTURE.md) already specifies the component structure and file layout. This research confirms the technical approach, fills in Zod v4 and Pino v10 API specifics, and identifies the exact implementation patterns the planner needs to prescribe.
-
-**Primary recommendation:** Use TypeScript branded/opaque types (a `declare const _brand` field trick) to make `GameState` and `PlayerView` structurally incompatible at compile time. Use Zod v4 `z.discriminatedUnion` for `GameEvent` — it now supports union and pipe discriminators in v4, making it the right tool for a multi-type event schema.
+**Primary recommendation:** Use Zod v4 `z.discriminatedUnion` for `GameEvent`. Use `unknown` at all framework type boundaries with schema validation. No branded types or compile-time generics — encapsulation enforces the information boundary.
 
 ---
 
@@ -78,7 +79,7 @@ The existing architecture research (ARCHITECTURE.md) already specifies the compo
 
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| TypeScript | 5.x | Language | Strict mode enforces the GameState/PlayerView boundary at compile time |
+| TypeScript | 5.x | Language | Strict mode; no generics in framework types; `unknown` at boundaries |
 | Zod | 4.x | Schema validation + type inference | `z.discriminatedUnion` for GameEvent; `z.object` for GameConfig and GameLog; infers TypeScript types from schemas |
 | Pino | 10.x | JSONL structured logging | Outputs NDJSON natively — no marshaling step; fastest Node.js logger; child loggers carry `gameId` automatically |
 
@@ -93,7 +94,7 @@ The existing architecture research (ARCHITECTURE.md) already specifies the compo
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | Zod discriminated union | TypeScript native discriminated union only | Zod adds runtime validation; TypeScript types alone give no runtime safety for log output |
-| Branded types for view separation | Separate nominal class hierarchy | Branded types have zero runtime overhead; class hierarchy would force instantiation semantics on plain data |
+| Encapsulation for view separation | Branded types / separate nominal types | Game holds state internally; view is `unknown` — no type-level enforcement needed |
 | Pino child logger per game | Single pino instance with manual `gameId` field | Child loggers auto-carry context fields; reduces risk of forgetting `gameId` in every log call |
 
 **Installation (Phase 1 only):**
@@ -111,42 +112,45 @@ pnpm add -D typescript tsx vitest pino-pretty @types/node
 ```
 src/
 ├── core/
-│   ├── types.ts        # All generic interfaces: GameState<S>, PlayerView<S>, GameConfig, GameOutcome
+│   ├── types.ts        # ActionRequest, GameConfig, GameOutcome (no generics)
 │   ├── events.ts       # GameEvent discriminated union + Zod schema
-│   ├── game.ts         # Game<S, A> interface
-│   ├── player.ts       # Player<S, A> interface
+│   ├── game.ts         # Game interface (state machine, no generics)
+│   ├── player.ts       # Player interface (not generic)
+│   ├── engine.ts       # Engine (mediator between Game and Player)
 │   └── event-bus.ts    # EventBus — typed pub/sub
 └── logging/
-    ├── schema.ts       # GameLog Zod schema (the JSONL record shape)
+    ├── schema.ts       # GameLogEntry Zod schema (the JSONL record shape)
     └── recorder.ts     # EventBus subscriber → writes JSONL via Pino child logger
 ```
 
-Files outside this scope (engine, players, games/avalon) are created in later phases.
+Files outside this scope (players, games/avalon) are created in later phases.
 
-### Pattern 1: Branded Types for Compile-Time View Separation
+### Pattern 1: Game as State Machine + Engine as Mediator
 
-**What:** Add a phantom `declare const _brand` field to `GameState` and `PlayerView` that makes them structurally incompatible. TypeScript's structural type system would otherwise allow `GameState` to satisfy a `PlayerView` parameter (they'd share fields). The brand prevents this.
+**What:** Game holds state internally and communicates via ActionRequests. Engine sits between Game and Player, routing requests, validating responses, and logging events. No generics anywhere.
 
-**When to use:** Any time `GameState` must be passed to the engine and `PlayerView` must be passed to players — the compile error is the guard.
+**When to use:** Always — this is the core architecture. Game produces ActionRequests, Engine delivers them to Players, Players respond, Engine validates and delivers back to Game.
 
 **Example:**
 ```typescript
-// src/core/types.ts
-
-// The _brand field exists only at the type level — no runtime overhead
-type GameState<S> = S & { readonly _gsTag: unique symbol }
-type PlayerView<S> = Partial<S> & { readonly _pvTag: unique symbol }
-
-// Factory functions to construct them (cast is internal only)
-function makeGameState<S>(state: S): GameState<S> {
-  return state as GameState<S>
+// src/core/game.ts
+interface Game {
+  readonly optionsSchema: ZodSchema
+  init(config: GameConfig): ActionRequest[]
+  handleResponse(playerId: string, action: unknown): ActionRequest[]
+  isTerminal(): boolean
+  getOutcome(): GameOutcome | null
 }
-function makePlayerView<S>(view: Partial<S>): PlayerView<S> {
-  return view as PlayerView<S>
+
+// src/core/types.ts
+interface ActionRequest {
+  playerId: string
+  view: unknown
+  actionSchema: ZodSchema
 }
 ```
 
-With `unique symbol`, `GameState<S>` and `PlayerView<S>` are structurally incompatible — assigning one to the other is a compile error.
+State is the game's internal concern. The framework never sees it.
 
 ### Pattern 2: Zod Discriminated Union for GameEvent
 
@@ -253,23 +257,23 @@ export class EventBus {
 
 ### Pattern 5: GameConfig Zod Schema
 
-**What:** `GameConfig` is validated at load time using a Zod object schema. The schema is the single source of truth for config structure — TypeScript type is inferred from it.
+**What:** `GameConfig` is validated at load time. Game-specific options go in `options: unknown`, validated by `game.optionsSchema`.
 
 **Example:**
 ```typescript
-// src/core/types.ts (or src/core/config.ts)
+// src/core/types.ts
 import { z } from 'zod'
 
 export const GameConfigSchema = z.object({
-  gameId: z.string().uuid(),
+  gameId: z.string(),
   seed: z.number().int(),
   players: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    model: z.string().optional(),   // e.g. "anthropic:claude-3-5-sonnet"
+    model: z.string().optional(),
     persona: z.string().optional(),
-  })),
-  roles: z.array(z.string()).optional(),  // game-specific; validated by game layer
+  })).min(1),
+  options: z.unknown().optional(),  // game-specific; validated by game.optionsSchema
 })
 
 export type GameConfig = z.infer<typeof GameConfigSchema>
@@ -277,7 +281,7 @@ export type GameConfig = z.infer<typeof GameConfigSchema>
 
 ### Pattern 6: GameLog Entry Schema (JSONL record)
 
-Per ROADMAP success criterion 4, each JSONL line must include `gameId`, `roundId`, `playerId`, `role`, `publicStatement`, `privateReasoning`, and `timestamp`. This maps to the `action-taken` event enriched with role and statement fields.
+Each JSONL line includes framework-level fields. Game-specific fields (role, round) go in `metadata`.
 
 ```typescript
 // src/logging/schema.ts
@@ -285,14 +289,12 @@ import { z } from 'zod'
 
 export const GameLogEntrySchema = z.object({
   gameId: z.string(),
-  roundId: z.number().int(),
   playerId: z.string(),
-  role: z.string(),              // game-defined role string
-  publicStatement: z.string().optional(),
-  privateReasoning: z.string().optional(),
   action: z.unknown(),
+  reasoning: z.string().optional(),
   phase: z.string(),
   timestamp: z.string().datetime(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 })
 
 export type GameLogEntry = z.infer<typeof GameLogEntrySchema>
@@ -300,11 +302,12 @@ export type GameLogEntry = z.infer<typeof GameLogEntrySchema>
 
 ### Anti-Patterns to Avoid
 
-- **GameState passed to Player.act():** The `act` signature must accept `PlayerView<S>`, not `GameState<S>`. If both types are the same, the brand enforcement is broken.
-- **Event `action` field typed as `any`:** Use `z.unknown()` in the core schema; game layers validate it with their own Zod schemas. `any` silently bypasses Zod.
+- **Generics in framework types:** Framework types use `unknown` at boundaries. Zod validates at runtime. No `Game<S, A>` or `Player<V, A>`.
+- **Game state exposed outside the class:** State is internal to Game. Only views go out through ActionRequest. Engine and Player never see raw game state.
+- **Event `action` field typed as `any`:** Use `z.unknown()` in the core schema; game layers validate with their own Zod schemas. `any` silently bypasses Zod.
 - **Pino logger as a module singleton:** Each game instance needs its own child logger with `gameId` bound. A module-level singleton makes batch games share a logger and lose per-game context.
-- **Emitting unvalidated events:** Always `GameEventSchema.parse(event)` before emitting, or emit only via typed factory functions that construct valid events. Skip validation and a malformed event silently corrupts the log.
-- **GameLog schema as a union of GameEvent:** The log entry is a denormalized record for ML consumption — it flattens role, statement, and reasoning into a single row. Don't make it identical to GameEvent.
+- **Emitting unvalidated events:** Always validate events before emitting. Skip validation and a malformed event silently corrupts the log.
+- **Game-specific fields in framework schemas:** Fields like `role`, `roundId`, `publicStatement` belong in game-level metadata, not core schemas.
 
 ---
 
@@ -314,7 +317,7 @@ export type GameLogEntry = z.infer<typeof GameLogEntrySchema>
 |---------|-------------|-------------|-----|
 | Runtime event validation | Custom event type guards | Zod discriminated union `.parse()` | Type guards miss nested field violations; Zod gives a descriptive error path |
 | JSONL serialization | `JSON.stringify` + manual newlines | Pino (outputs NDJSON natively) | Pino handles escaping, async buffering, and file rotation; hand-rolled serializers corrupt logs on newlines in field values |
-| Compile-time type incompatibility | Separate class hierarchies | TypeScript branded types with `unique symbol` | Classes require instantiation; branded types are zero-cost and work on plain objects |
+| Information hiding | Branded types / class hierarchies | Encapsulation — Game holds state internally, exposes view as `unknown` | Simpler; no type machinery needed |
 | Config file loading + validation | Custom JSON parser | Zod `.parse()` on `JSON.parse()` output | Zod generates a typed parse result with descriptive error messages; custom parsers silently coerce bad values |
 
 **Key insight:** Zod and Pino together cover all runtime correctness concerns for this phase. Any custom solution for validation or serialization will be less correct and harder to extend.
@@ -323,15 +326,15 @@ export type GameLogEntry = z.infer<typeof GameLogEntrySchema>
 
 ## Common Pitfalls
 
-### Pitfall 1: GameState Structurally Assignable to PlayerView
+### Pitfall 1: Game State Leaking to Players
 
-**What goes wrong:** Without explicit structural incompatibility, TypeScript's structural typing allows `GameState<S>` to satisfy a `PlayerView<S>` parameter if `PlayerView<S>` is just `Partial<S>`. The engine can accidentally pass full state to a player.
+**What goes wrong:** Full game state reaches a player — they see hidden roles, secret votes, etc. Training data is invalidated.
 
-**Why it happens:** TypeScript is structurally typed — it doesn't care about the "name" of a type, only its shape. A `GameState<S>` that has all fields of `PlayerView<S>` plus extras will satisfy the `PlayerView<S>` parameter without error.
+**Why it happens:** Game state is passed around as a value and someone accidentally passes the full state instead of a filtered view.
 
-**How to avoid:** Use `unique symbol` brands on both types. The brands create phantom structural incompatibility at the type level.
+**How to avoid:** Game holds state internally. Only views go out through ActionRequest as `unknown`. The engine never has access to game state — only ActionRequests.
 
-**Warning signs:** `const view: PlayerView<S> = state` compiles without error.
+**Warning signs:** Any function that accepts both game state and player view types; any place where game internals are serialized into player-facing data.
 
 ### Pitfall 2: Log Entry Missing gameId / roundId
 
@@ -379,17 +382,30 @@ export type GameLogEntry = z.infer<typeof GameLogEntrySchema>
 
 Verified patterns from project architecture research and Zod v4 docs:
 
-### Branded Type Incompatibility (Compile-Time PlayerView Guard)
+### Game + Engine Pattern (No Generics)
 ```typescript
 // src/core/types.ts
-declare const _gsTag: unique symbol
-declare const _pvTag: unique symbol
+interface ActionRequest {
+  playerId: string
+  view: unknown
+  actionSchema: ZodSchema
+}
 
-export type GameState<S> = S & { readonly [_gsTag]: never }
-export type PlayerView<S> = Partial<S> & { readonly [_pvTag]: never }
+// src/core/game.ts
+interface Game {
+  readonly optionsSchema: ZodSchema
+  init(config: GameConfig): ActionRequest[]
+  handleResponse(playerId: string, action: unknown): ActionRequest[]
+  isTerminal(): boolean
+  getOutcome(): GameOutcome | null
+}
 
-// These lines will NOT compile — that's the point
-// const view: PlayerView<S> = state   // Error: Type 'GameState<S>' is not assignable to 'PlayerView<S>'
+// src/core/player.ts
+interface Player {
+  readonly id: string
+  readonly name: string
+  act(request: ActionRequest): Promise<unknown>
+}
 ```
 
 ### Zod Discriminated Union (v4 syntax)
@@ -441,7 +457,7 @@ function loadConfig(path: string) {
 |--------------|------------------|--------------|--------|
 | `z.union` for multi-type event schemas | `z.discriminatedUnion` with union/pipe discriminators | Zod v4 (2025) | O(1) parse dispatch; supports complex discriminator types |
 | `ts-node` for TypeScript execution | `tsx` (esbuild-based) | 2023–2024 | ~2x faster; no extra tsconfig needed |
-| Class-based nominal types | Branded types with `unique symbol` | TypeScript 2.7+ | Zero runtime overhead; works on plain data objects |
+| Class-based nominal types / branded types | Encapsulation + `unknown` at boundaries | Final design decision | No type-level enforcement needed; encapsulation is sufficient |
 | Manual JSONL writes | Pino v10 with `pino.destination()` | Pino v9+ | Async buffered I/O; no manual newline handling |
 
 **Deprecated/outdated:**
@@ -453,19 +469,13 @@ function loadConfig(path: string) {
 ## Open Questions
 
 1. **Extension point for game-specific event types**
-   - What we know: Phase 1 locks `core/events.ts`. Phase 2 will need Avalon-specific events (quest-result, assassination-attempt).
-   - What's unclear: Whether to include an extensible `GameSpecificEvent` escape hatch in Phase 1 or defer to Phase 2 to extend the union.
-   - Recommendation: Reserve a `custom` event variant with `subtype: string` and `payload: z.unknown()` in the core union. Phase 2 can define typed aliases over it without modifying core.
+   - Resolved: Reserve a `custom` event variant with `subtype: string` and `payload: z.unknown()` in the core union. Phase 2 defines typed aliases without modifying core.
 
 2. **Outcome record exact fields**
-   - What we know: ROADMAP says "faction winner, per-player role, Merlin assassination result" for DATA-02.
-   - What's unclear: Whether `GameOutcome` belongs in `core/types.ts` (game-agnostic) or needs to be a generic `GameOutcome<R>` where `R` is game-specific role data.
-   - Recommendation: Define `GameOutcome` as `{ winner: string; playerRoles: Record<string, string>; metadata: Record<string, unknown> }`. Game layer populates `metadata` with Merlin-assassination result. Avoids generics here where a flexible `Record` suffices.
+   - Resolved: `GameOutcome = { scores: Record<string, number>; metadata?: Record<string, unknown> }`. Game-specific data (roles, assassination) goes in metadata.
 
 3. **Log file naming convention**
-   - What we know: Per CONTEXT.md, this is Claude's discretion. ROADMAP mentions "batch manifest file" and "directory per batch, file per game" in Phase 5.
-   - What's unclear: Phase 1 sets naming conventions used by all future phases.
-   - Recommendation: `logs/{gameId}.jsonl` for single games. Phase 5 introduces `logs/{batchId}/{gameId}.jsonl`. Define the `gameId` as a UUID generated at config load time — don't use sequential integers (breaks parallel batch runs).
+   - Claude's discretion. Recommendation: `logs/{gameId}.jsonl` for single games, `logs/{batchId}/{gameId}.jsonl` for batch.
 
 ---
 
@@ -484,16 +494,16 @@ function loadConfig(path: string) {
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| FRAME-01 | `GameState<S>` is not assignable to `PlayerView<S>` (compile error) | unit (type-level) | `pnpm tsc --noEmit` | ❌ Wave 0 |
-| FRAME-01 | `Game<S, A>` interface can be implemented for any S/A | unit | `pnpm vitest run src/core/game.test.ts` | ❌ Wave 0 |
-| FRAME-02 | `Player<S, A>` interface `act()` signature returns `Promise<A>` | unit | `pnpm vitest run src/core/player.test.ts` | ❌ Wave 0 |
+| FRAME-01 | `Game` interface can be implemented with internal state, no generics | unit | `pnpm vitest run src/core/game.test.ts` | ❌ Wave 0 |
+| FRAME-01 | `Engine` mediates between Game and Player, validates via schema | unit | `pnpm vitest run src/core/engine.test.ts` | ❌ Wave 0 |
+| FRAME-02 | `Player` interface `act()` receives ActionRequest, returns `Promise<unknown>` | unit | `pnpm vitest run src/core/player.test.ts` | ❌ Wave 0 |
 | FRAME-03 | EventBus emits to subscribers without game-specific code | unit | `pnpm vitest run src/core/event-bus.test.ts` | ❌ Wave 0 |
 | FRAME-03 | Recorder writes a JSONL line to disk for each event | integration | `pnpm vitest run src/logging/recorder.test.ts` | ❌ Wave 0 |
 | DATA-01 | `GameEventSchema.parse()` validates all defined event variants | unit | `pnpm vitest run src/core/events.test.ts` | ❌ Wave 0 |
 | DATA-01 | `GameEventSchema.parse()` rejects events with missing required fields | unit | `pnpm vitest run src/core/events.test.ts` | ❌ Wave 0 |
 | DATA-01 | JSONL output includes `gameId` on every line | integration | `pnpm vitest run src/logging/recorder.test.ts` | ❌ Wave 0 |
-| DATA-02 | `GameOutcome` type captures winner, player roles, and metadata | unit | `pnpm vitest run src/core/types.test.ts` | ❌ Wave 0 |
-| DATA-03 | `GameConfigSchema.parse()` validates seed, players, and optional roles | unit | `pnpm vitest run src/core/types.test.ts` | ❌ Wave 0 |
+| DATA-02 | `GameOutcome` type captures scores and optional metadata | unit | `pnpm vitest run src/core/types.test.ts` | ❌ Wave 0 |
+| DATA-03 | `GameConfigSchema.parse()` validates seed, players, and optional options | unit | `pnpm vitest run src/core/types.test.ts` | ❌ Wave 0 |
 | DATA-03 | `GameConfigSchema.parse()` rejects config without seed | unit | `pnpm vitest run src/core/types.test.ts` | ❌ Wave 0 |
 
 ### Sampling Rate
@@ -507,8 +517,9 @@ function loadConfig(path: string) {
 - [ ] `vitest.config.ts` — framework config, covers all tests
 - [ ] `src/core/events.test.ts` — covers DATA-01 (FRAME-03 adjacently)
 - [ ] `src/core/types.test.ts` — covers DATA-02, DATA-03
-- [ ] `src/core/game.test.ts` — covers FRAME-01 interface contract
-- [ ] `src/core/player.test.ts` — covers FRAME-02 interface contract
+- [ ] `src/core/game.test.ts` — covers FRAME-01 Game interface
+- [ ] `src/core/player.test.ts` — covers FRAME-02 Player interface
+- [ ] `src/core/engine.test.ts` — covers FRAME-01 Engine mediator
 - [ ] `src/core/event-bus.test.ts` — covers FRAME-03 EventBus
 - [ ] `src/logging/recorder.test.ts` — covers FRAME-03 Recorder + DATA-01 JSONL output
 - [ ] `package.json` test scripts: `"test": "vitest run"`, `"typecheck": "tsc --noEmit"`

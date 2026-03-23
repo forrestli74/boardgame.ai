@@ -17,14 +17,14 @@ Evil player agents receive game state objects containing all hidden role assignm
 The same game state object is used for orchestration (where complete information is needed) and for building player prompts (where information must be filtered). Developers pass the full state to a generic `buildPrompt(state, player)` helper and forget that serialization exposes all fields. TypeScript's structural typing gives no runtime protection — a `GameState` object passed to a function doesn't enforce that only a `PlayerView` subset reaches the LLM.
 
 **How to avoid:**
-Define a distinct `PlayerView` type that contains only what a given player legitimately knows. Never pass the canonical `GameState` directly to prompt builders. Enforce this at the type level: the function signature for prompt construction should accept `PlayerView`, not `GameState`. Add a test for each role that asserts which fields are present and absent in their view.
+Game holds state internally and only exposes filtered views through ActionRequest as `unknown`. The Engine and Player never have access to raw game state — only the view the Game constructs. Add a test for each role that asserts which fields are present and absent in their view.
 
 **Warning signs:**
 - Evil agents "accidentally" avoid nominating Merlin in the late game at above-random rates even in early tests
-- Prompt builder functions accept `GameState` as a parameter
+- Player or prompt builder has access to anything other than the ActionRequest view
 - Log output shows role fields in per-player prompt sections
 
-**Phase to address:** Game engine / core data model phase (before any LLM integration)
+**Phase to address:** Phase 1 (core data model) — Game holds state internally; view is `unknown` in ActionRequest
 
 ---
 
@@ -161,7 +161,7 @@ Game logs are structured for human readability (narrative text, embedded reasoni
 Logging is treated as an afterthought. The game runs correctly first, then someone adds `console.log` or a basic JSON dump. The structure reflects implementation internals rather than the data model a training pipeline would want.
 
 **How to avoid:**
-Define the log schema as a first-class artifact, alongside game rules, before writing engine code. Each log entry should be a typed event: `{type: "discussion", gameId, roundId, playerId, role, publicStatement, privateReasoning, timestamp}`. The training pipeline consumer should be a stakeholder in schema design. Validate every emitted log entry against the schema at emit time.
+Define the log schema as a first-class artifact before writing engine code. Each log entry should be a typed event with framework fields (`gameId`, `playerId`, `action`, `phase`, `timestamp`) and game-specific data in `metadata`. The training pipeline consumer should be a stakeholder in schema design. Validate every emitted log entry against the schema at emit time.
 
 **Warning signs:**
 - Log entries are strings or nested objects without a defined TypeScript type
@@ -177,12 +177,12 @@ Define the log schema as a first-class artifact, alongside game rules, before wr
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Pass full `GameState` to prompt builder | Simpler code | Hidden information leakage, invalid training data | Never |
+| Expose game state outside the Game class | Simpler code | Hidden information leakage, invalid training data | Never |
 | Single prompt template for all roles | Fast to iterate | Poor agent performance, no role differentiation | Never |
 | `Promise.all()` for batch games | Simple code | API rate limit explosions at scale | Only for ≤5 games in tests |
 | `JSON.parse()` without Zod validation | Less boilerplate | Silent type mismatches, runtime crashes in batch | Never in production paths |
 | Flat event log (no typed schema) | Faster to ship | All training data requires re-processing | Never if ML use is a goal |
-| Abstract base classes before Avalon works | Feels extensible | Framework fights concrete game mechanics | Never — extract later |
+| Generics / abstract base classes before Avalon works | Feels extensible | Framework fights concrete game mechanics | Never — use `unknown` at boundaries |
 | Append full history to every prompt | No filtering logic needed | Token costs explode in batch, context poisoning | Only for single-game prototyping |
 
 ---
@@ -252,13 +252,13 @@ Define the log schema as a first-class artifact, alongside game rules, before wr
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Hidden information leakage | Phase 1: Core data model | Test: run game, assert each PlayerView contains only legal information for that role |
+| Hidden information leakage | Phase 1: Core data model | Game holds state internally; ActionRequest view is `unknown`; test each role's view in Phase 2 |
 | Training data schema designed after the fact | Phase 1: Core data model | Schema TypeScript types defined and reviewed before engine implementation begins |
-| Context window growth | Phase 1: Core data model | PlayerView design includes a bounded recent-history field |
+| Context window growth | Phase 1: Core data model | ActionRequest view is game's responsibility; game controls what history to include |
 | Flat prompt architecture | Phase 2: LLM agent integration | Per-role prompt templates exist as separate artifacts, each with a unit test |
 | LLM agents revealing hidden roles | Phase 2: LLM agent integration | 20-game smoke test shows < 5% role-disclosure rate in discussion text |
 | Structured output brittleness | Phase 2: LLM agent integration | Integration tests run against all supported model providers |
-| Over-engineered abstractions | Phase 1 + 2: Actively deferred | No abstract base classes in codebase until Avalon is fully playable |
+| Over-engineered abstractions | Phase 1 + 2: Actively deferred | No generics or abstract base classes; `unknown` at framework boundaries |
 | Batch concurrency explosion | Phase 3: Batch execution | Load test with 50 games; verify no 429 errors; token budget tracked per game |
 | Race conditions in batch | Phase 3: Batch execution | Concurrency limiter present; configurable via CLI flag |
 
