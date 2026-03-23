@@ -12,7 +12,7 @@ Build a TypeScript CLI framework where LLM agents play complete Avalon games, pr
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Data Model** - Lock types and log schema before any game logic is written
+- [x] **Phase 1: Data Model** - Lock types and log schema before any game logic is written (completed 2026-03-23)
 - [ ] **Phase 2: Avalon Rules** - Complete rules engine testable with deterministic inputs
 - [ ] **Phase 3: LLM Agents** - LLM players with role-differentiated prompts and discussion
 - [ ] **Phase 4: CLI Runner** - Usable single-game CLI that writes a complete JSONL log
@@ -90,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Model | 0/1 | Planning complete | - |
+| 1. Data Model | 1/1 | Complete   | 2026-03-23 |
 | 2. Avalon Rules | 0/TBD | Not started | - |
 | 3. LLM Agents | 0/TBD | Not started | - |
 | 4. CLI Runner | 0/TBD | Not started | - |

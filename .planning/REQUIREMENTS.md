@@ -7,9 +7,9 @@
 
 ### Game Framework
 
-- [ ] **FRAME-01**: Game-agnostic engine interface — Game as state machine, Engine as mediator, no generics
-- [ ] **FRAME-02**: Pluggable player interface — `act(request: ActionRequest): Promise<unknown>`, not generic
-- [ ] **FRAME-03**: Event-based game logging decoupled from game loop
+- [x] **FRAME-01**: Game-agnostic engine interface — Game as state machine, Engine as mediator, no generics
+- [x] **FRAME-02**: Pluggable player interface — `act(request: ActionRequest): Promise<unknown>`, not generic
+- [x] **FRAME-03**: Event-based game logging decoupled from game loop
 
 ### Avalon Rules
 
@@ -32,9 +32,9 @@
 
 ### Data & Logging
 
-- [ ] **DATA-01**: Structured JSONL game log with event schema (turn, phase, player, action, reasoning)
-- [ ] **DATA-02**: Post-game outcome record — `scores: Record<string, number>` with optional metadata
-- [ ] **DATA-03**: Reproducible game configs — `GameConfig` with seed, players, `options: unknown` validated by game's `optionsSchema`
+- [x] **DATA-01**: Structured JSONL game log with event schema (turn, phase, player, action, reasoning)
+- [x] **DATA-02**: Post-game outcome record — `scores: Record<string, number>` with optional metadata
+- [x] **DATA-03**: Reproducible game configs — `GameConfig` with seed, players, `options: unknown` validated by game's `optionsSchema`
 - [ ] **DATA-04**: AI-generated post-game summary narrative
 
 ### Execution
@@ -85,12 +85,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRAME-01 | Phase 1 | Pending |
-| FRAME-02 | Phase 1 | Pending |
-| FRAME-03 | Phase 1 | Pending |
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
-| DATA-03 | Phase 1 | Pending |
+| FRAME-01 | Phase 1 | Complete |
+| FRAME-02 | Phase 1 | Complete |
+| FRAME-03 | Phase 1 | Complete |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
+| DATA-03 | Phase 1 | Complete |
 | AVLN-01 | Phase 2 | Pending |
 | AVLN-02 | Phase 2 | Pending |
 | AVLN-03 | Phase 2 | Pending |
