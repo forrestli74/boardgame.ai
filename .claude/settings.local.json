@@ -7,7 +7,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(/Users/jiaqili/.claude/skills/tide-tasks/tide-list-tasks.sh)",
-      "Bash(/Users/jiaqili/.claude/skills/tide/tide-init.sh)"
+      "Bash(/Users/jiaqili/.claude/skills/tide/tide-init.sh)",
+      "Bash(git reset:*)"
     ]
   }
 }
