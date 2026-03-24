@@ -4,7 +4,10 @@
       "WebSearch",
       "Skill(gsd:discuss-phase)",
       "Skill(gsd:discuss-phase:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(/Users/jiaqili/.claude/skills/tide-tasks/tide-list-tasks.sh)",
+      "Bash(/Users/jiaqili/.claude/skills/tide/tide-init.sh)"
     ]
   }
 }
