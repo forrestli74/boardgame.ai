@@ -6,7 +6,7 @@ import type { Player } from '../core/player.js'
 import type { ActionRequest, GameConfig } from '../core/types.js'
 import { Recorder } from '../core/recorder.js'
 import { AIGameMaster } from './game-master.js'
-import { AsyncEngine } from './async-engine.js'
+import { Engine } from '../core/engine.js'
 import { LLMClient } from './llm-client.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -67,7 +67,7 @@ describe.skipIf(SKIP)('integration: AI Game Master', () => {
       ],
     }
 
-    const engine = new AsyncEngine(recorder)
+    const engine = new Engine(recorder)
     const outcome = await engine.run(game, players, config)
     recorder.flush()
 

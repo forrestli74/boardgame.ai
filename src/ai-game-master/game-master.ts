@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { AsyncGame } from './async-game.js'
+import type { Game } from '../core/game.js'
 import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../core/types.js'
 import type { GameEvent } from '../core/events.js'
 import { jsonSchemaToZod, LLMGameResponseSchema } from './schemas.js'
@@ -11,10 +11,9 @@ import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildToolDefin
  * AI Game Master — uses an LLM to interpret a rules document and manage
  * game state, action requests, and terminal conditions.
  *
- * Implements AsyncGame because LLM calls are inherently asynchronous.
- * Use with AsyncEngine instead of the synchronous Engine.
+ * Implements Game with async init/handleResponse (LLM calls).
  */
-export class AIGameMaster implements AsyncGame {
+export class AIGameMaster implements Game {
   readonly optionsSchema = z.object({})
 
   private state: Record<string, unknown> = {}

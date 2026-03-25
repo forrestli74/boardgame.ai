@@ -17,7 +17,7 @@ export class Engine {
   async run(game: Game, players: Map<string, Player>, config: GameConfig): Promise<GameOutcome | null> {
     const pending = new Map<string, Promise<PendingResponse>>()
 
-    const initial = game.init(config)
+    const initial = await game.init(config)
     for (const event of initial.events) {
       this.recorder.record(event)
     }
@@ -50,7 +50,7 @@ export class Engine {
         timestamp: new Date().toISOString(),
       })
 
-      const gameResponse = game.handleResponse(response.playerId, parsed)
+      const gameResponse = await game.handleResponse(response.playerId, parsed)
       for (const event of gameResponse.events) {
         this.recorder.record(event)
       }
