@@ -7,7 +7,6 @@ import type { ActionRequest, GameConfig } from '../core/types.js'
 import { Recorder } from '../core/recorder.js'
 import { AIGameMaster } from './game-master.js'
 import { Engine } from '../core/engine.js'
-import { LLMClient } from './llm-client.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -40,8 +39,7 @@ afterEach(() => {
 describe.skipIf(SKIP)('integration: AI Game Master', () => {
   it('plays tic-tac-toe to completion', async () => {
     const rulesDoc = readFileSync(RULES_PATH, 'utf-8')
-    const llmClient = new LLMClient()
-    const game = new AIGameMaster(rulesDoc, llmClient)
+    const game = new AIGameMaster(rulesDoc)
     const recorder = new Recorder('ttt-integration-1', LOG_FILE)
 
     // X plays diagonal: (0,0), (1,1), (2,2) -- wins if O doesn't block
