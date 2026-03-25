@@ -1,9 +1,10 @@
-import { z } from 'zod'
+import { generateText, tool } from 'ai'
 import type { Player } from '../core/player.js'
 import type { ActionRequest } from '../core/types.js'
-import { LLMClient, type LLMClientOptions, type ToolDefinition } from '../ai-game-master/llm-client.js'
+import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
 
-export interface LLMPlayerOptions extends LLMClientOptions {
+export interface LLMPlayerOptions {
+  model?: string
   persona?: string
 }
 
@@ -30,14 +31,14 @@ function formatView(view: unknown): string {
 export class LLMPlayer implements Player {
   readonly id: string
   readonly name: string
-  private readonly llmClient: LLMClient
+  private readonly model: string
   private readonly persona?: string
 
   constructor(id: string, name: string, options?: LLMPlayerOptions) {
     this.id = id
     this.name = name
+    this.model = options?.model ?? DEFAULT_MODEL
     this.persona = options?.persona
-    this.llmClient = new LLMClient(options)
   }
 
   async act(request: ActionRequest): Promise<unknown> {
@@ -46,18 +47,20 @@ export class LLMPlayer implements Player {
     const viewText = formatView(request.view)
     const userMessage = `Current game state (your view):\n\n${viewText}\n\nChoose your action.`
 
-    const jsonSchema = z.toJSONSchema(request.actionSchema)
+    const result = await generateText({
+      model: registry.languageModel(this.model),
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+      maxTokens: 4096,
+      tools: {
+        submit_action: tool({
+          description: 'Submit your chosen action for this turn',
+          parameters: request.actionSchema,
+        }),
+      },
+      toolChoice: { type: 'tool', toolName: 'submit_action' },
+    })
 
-    const tool: ToolDefinition = {
-      name: 'submit_action',
-      description: 'Submit your chosen action for this turn',
-      input_schema: jsonSchema as Record<string, unknown>,
-    }
-
-    return this.llmClient.call(
-      systemPrompt,
-      [{ role: 'user', content: userMessage }],
-      tool,
-    )
+    return result.toolCalls[0].args
   }
 }
