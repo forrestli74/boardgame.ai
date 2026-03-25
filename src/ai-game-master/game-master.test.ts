@@ -26,7 +26,7 @@ const { AIGameMaster } = await import('./game-master.js')
 
 function mockLLMResponse(response: LLMGameResponse) {
   mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ args: response }],
+    toolCalls: [{ input: response }],
   })
 }
 

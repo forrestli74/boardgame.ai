@@ -25,7 +25,7 @@ const { LLMPlayer } = await import('./llm-player.js')
 
 function mockToolCallResponse(args: unknown) {
   mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ args }],
+    toolCalls: [{ input: args }],
   })
 }
 

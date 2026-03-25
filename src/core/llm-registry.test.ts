@@ -25,6 +25,6 @@ describe('llm-registry', () => {
   })
 
   it('throws on unknown provider prefix', () => {
-    expect(() => registry.languageModel('unknown:model')).toThrow()
+    expect(() => registry.languageModel('unknown:model' as any)).toThrow()
   })
 })

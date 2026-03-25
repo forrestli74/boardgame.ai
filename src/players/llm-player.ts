@@ -48,19 +48,19 @@ export class LLMPlayer implements Player {
     const userMessage = `Current game state (your view):\n\n${viewText}\n\nChoose your action.`
 
     const result = await generateText({
-      model: registry.languageModel(this.model),
+      model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
-      maxTokens: 4096,
+      maxOutputTokens: 4096,
       tools: {
         submit_action: tool({
           description: 'Submit your chosen action for this turn',
-          parameters: request.actionSchema,
+          inputSchema: request.actionSchema,
         }),
       },
       toolChoice: { type: 'tool', toolName: 'submit_action' },
     })
 
-    return result.toolCalls[0].args
+    return result.toolCalls[0].input
   }
 }

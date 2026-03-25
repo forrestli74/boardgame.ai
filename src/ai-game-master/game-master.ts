@@ -53,20 +53,20 @@ export class AIGameMaster implements Game {
 
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
     const result = await generateText({
-      model: registry.languageModel(this.model),
+      model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
-      maxTokens: 4096,
+      maxOutputTokens: 4096,
       tools: {
         game_master_response: tool({
           description: 'Return the updated game state and next actions',
-          parameters: LLMGameResponseSchema,
+          inputSchema: LLMGameResponseSchema,
         }),
       },
       toolChoice: { type: 'tool', toolName: 'game_master_response' },
     })
 
-    return result.toolCalls[0].args
+    return result.toolCalls[0].input
   }
 
   private processLLMResponse(llmResponse: LLMGameResponse): GameResponse {
