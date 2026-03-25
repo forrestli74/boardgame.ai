@@ -34,6 +34,7 @@ Replace the Anthropic-specific `LLMClient` with direct usage of the **Vercel AI 
 - **Delete** `src/ai-game-master/llm-client.ts` — no shared LLM wrapper class
 - **New** `src/core/llm-registry.ts` — exports a configured provider registry
 - **Edit** `src/ai-game-master/game-master.ts` — call `generateText()` directly
+- **Edit** `src/ai-game-master/prompts.ts` — delete `buildToolDefinition()` and `ToolDefinition` import
 - **Edit** `src/players/llm-player.ts` — call `generateText()` directly
 - **Edit** tests for both consumers
 
@@ -85,6 +86,7 @@ const result = await generateText({
   model: registry.languageModel(this.model),
   system: systemPrompt,
   messages,
+  maxTokens: 4096,
   tools: {
     [toolName]: tool({
       description: toolDescription,
@@ -96,6 +98,8 @@ const result = await generateText({
 
 return result.toolCalls[0].args;
 ```
+
+Note: `maxTokens: 4096` preserves the current behavior. Some providers (notably Anthropic) require this to be set explicitly.
 
 ### LLMPlayer Changes
 
@@ -115,6 +119,8 @@ interface LLMPlayerOptions {
 - Constructor takes `model?: string` instead of `LLMClientOptions`
 - Each `init()`/`handleResponse()` call uses `generateText()` directly
 - Same forced tool use pattern as LLMPlayer
+- **`prompts.ts`:** `buildToolDefinition()` currently returns an Anthropic-specific `ToolDefinition` (imported from `llm-client.ts`). This function is deleted — the game master tool is defined inline using `tool()` from the AI SDK with a Zod schema (the existing `LLMGameResponseSchema` from `schemas.ts`). The `ToolDefinition` type is no longer needed. Other prompt functions (`buildSystemPrompt`, `buildInitMessage`, `buildActionMessage`) are unchanged — they return plain strings.
+- **`schemas.ts`:** `jsonSchemaToZod` stays untouched — it converts JSON Schema from LLM *responses* (action schemas the game master produces for players). This is unrelated to the provider migration, which eliminates JSON Schema on the *input* side.
 
 ### Dependency Changes
 
