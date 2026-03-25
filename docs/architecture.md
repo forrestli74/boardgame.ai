@@ -61,14 +61,17 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 
 LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript, it feeds a markdown rules document to an LLM and asks it to manage game state.
 
-- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + `llmClient`. Each `init()`/`handleResponse()` call sends the full rules + state to the LLM (stateless — no conversation history).
-- **`llm-client.ts`** — Thin Anthropic SDK wrapper. Uses forced tool use (`tool_choice: { type: 'tool', name: ... }`) for structured output.
+- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'anthropic:claude-sonnet-4-20250514'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
 - **`prompts.ts`** — System prompt and message builders for game master LLM calls.
 - **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
 
 ## LLM Player (`src/players/llm-player.ts`)
 
-LLM-powered Player implementation. Receives an `ActionRequest`, converts the Zod action schema to JSON Schema via `z.toJSONSchema()`, and uses forced tool use to get a structured action from the LLM. Supports optional `persona` string. Stateless per request.
+LLM-powered Player implementation. Receives an `ActionRequest` and uses the Vercel AI SDK's `generateText()` with forced tool use to get a structured action from the LLM. Supports optional `persona` string and configurable model via `'provider:model'` string (default: `'anthropic:claude-sonnet-4-20250514'`). Stateless per request.
+
+## Provider Registry (`src/core/llm-registry.ts`)
+
+Shared provider registry built with Vercel AI SDK's `createProviderRegistry()`. Registers Anthropic, OpenAI, and Google providers. Resolves `'provider:model'` strings (e.g., `'anthropic:claude-sonnet-4-20250514'`, `'openai:gpt-4o'`) to model instances. API keys are read from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
 
 ## Project Structure
 
@@ -81,11 +84,11 @@ src/
 │   ├── player.ts             # Player interface
 │   ├── events.ts             # GameEvent discriminated union
 │   ├── recorder.ts           # JSONL writer via Pino
+│   ├── llm-registry.ts       # Provider registry (AI SDK)
 │   └── *.test.ts             # Co-located tests
 │
 ├── ai-game-master/           # LLM-powered Game implementation
 │   ├── game-master.ts        # AIGameMaster implements Game
-│   ├── llm-client.ts         # Anthropic SDK wrapper with forced tool use
 │   ├── prompts.ts            # Prompt builders
 │   ├── schemas.ts            # LLM response schema + JSON Schema ↔ Zod
 │   └── *.test.ts             # Co-located tests
