@@ -1,26 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
-import { LLMPlayer } from './llm-player.js'
-import type { LLMClient } from '../ai-game-master/llm-client.js'
 import type { ActionRequest } from '../core/types.js'
 
 // ---------------------------------------------------------------------------
-// Mock LLMClient — intercept constructor to inject a mock
+// Mock generateText from 'ai' module
 // ---------------------------------------------------------------------------
 
-const mockCall = vi.fn()
+const mockGenerateText = vi.fn()
 
-vi.mock('../ai-game-master/llm-client.js', () => {
+vi.mock('ai', async () => {
+  const actual = await vi.importActual('ai')
   return {
-    LLMClient: class MockLLMClient {
-      call = mockCall
-    },
+    ...actual,
+    generateText: mockGenerateText,
   }
 })
+
+// Import after mock setup
+const { LLMPlayer } = await import('./llm-player.js')
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function mockToolCallResponse(args: unknown) {
+  mockGenerateText.mockResolvedValueOnce({
+    toolCalls: [{ args }],
+  })
+}
 
 function makeRequest(overrides?: Partial<ActionRequest>): ActionRequest {
   return {
@@ -39,7 +46,7 @@ function makeRequest(overrides?: Partial<ActionRequest>): ActionRequest {
 
 describe('LLMPlayer', () => {
   beforeEach(() => {
-    mockCall.mockReset()
+    mockGenerateText.mockReset()
   })
 
   it('implements the Player interface with id and name', () => {
@@ -48,36 +55,35 @@ describe('LLMPlayer', () => {
     expect(player.name).toBe('Alice')
   })
 
-  it('calls LLMClient with system prompt, view message, and tool definition', async () => {
-    mockCall.mockResolvedValueOnce({ position: 1 })
+  it('calls generateText with system prompt, view message, and tool definition', async () => {
+    mockToolCallResponse({ position: 1 })
     const player = new LLMPlayer('p1', 'Alice')
     const request = makeRequest()
 
     const result = await player.act(request)
 
     expect(result).toEqual({ position: 1 })
-    expect(mockCall).toHaveBeenCalledOnce()
+    expect(mockGenerateText).toHaveBeenCalledOnce()
 
-    const [systemPrompt, messages, tool] = mockCall.mock.calls[0]
+    const callArgs = mockGenerateText.mock.calls[0][0]
 
     // System prompt includes reasoning instructions
-    expect(systemPrompt).toContain('Think step-by-step')
-    expect(systemPrompt).toContain('board game player')
+    expect(callArgs.system).toContain('Think step-by-step')
+    expect(callArgs.system).toContain('board game player')
 
     // User message contains the game view
-    expect(messages).toHaveLength(1)
-    expect(messages[0].role).toBe('user')
-    expect(messages[0].content).toContain('board')
-    expect(messages[0].content).toContain('Current game state')
+    expect(callArgs.messages).toHaveLength(1)
+    expect(callArgs.messages[0].role).toBe('user')
+    expect(callArgs.messages[0].content).toContain('board')
+    expect(callArgs.messages[0].content).toContain('Current game state')
 
-    // Tool definition has the action schema as JSON Schema
-    expect(tool.name).toBe('submit_action')
-    expect(tool.input_schema).toHaveProperty('type', 'object')
-    expect(tool.input_schema.properties).toHaveProperty('position')
+    // Tool definition uses forced tool choice
+    expect(callArgs.toolChoice).toEqual({ type: 'tool', toolName: 'submit_action' })
+    expect(callArgs.tools.submit_action).toBeDefined()
   })
 
   it('passes string views through as-is', async () => {
-    mockCall.mockResolvedValueOnce({ choice: 'approve' })
+    mockToolCallResponse({ choice: 'approve' })
     const player = new LLMPlayer('p1', 'Alice')
     const request = makeRequest({
       view: 'You are on a quest. The team is: Alice, Bob.',
@@ -86,12 +92,12 @@ describe('LLMPlayer', () => {
 
     await player.act(request)
 
-    const [, messages] = mockCall.mock.calls[0]
-    expect(messages[0].content).toContain('You are on a quest. The team is: Alice, Bob.')
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.messages[0].content).toContain('You are on a quest. The team is: Alice, Bob.')
   })
 
   it('JSON-stringifies object views', async () => {
-    mockCall.mockResolvedValueOnce({ move: 'rock' })
+    mockToolCallResponse({ move: 'rock' })
     const player = new LLMPlayer('p1', 'Alice')
     const view = { hand: ['rock', 'paper'], score: 5 }
     const request = makeRequest({
@@ -101,42 +107,41 @@ describe('LLMPlayer', () => {
 
     await player.act(request)
 
-    const [, messages] = mockCall.mock.calls[0]
-    // Object views should be JSON-stringified
-    expect(messages[0].content).toContain('"hand"')
-    expect(messages[0].content).toContain('"score"')
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.messages[0].content).toContain('"hand"')
+    expect(callArgs.messages[0].content).toContain('"score"')
   })
 
   it('includes persona in system prompt when provided', async () => {
-    mockCall.mockResolvedValueOnce({ position: 4 })
+    mockToolCallResponse({ position: 4 })
     const player = new LLMPlayer('p1', 'Alice', { persona: 'Play aggressively and take risks.' })
 
     await player.act(makeRequest())
 
-    const [systemPrompt] = mockCall.mock.calls[0]
-    expect(systemPrompt).toContain('Play aggressively and take risks.')
-    expect(systemPrompt).toContain('Player persona:')
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.system).toContain('Play aggressively and take risks.')
+    expect(callArgs.system).toContain('Player persona:')
   })
 
   it('does not include persona section when no persona given', async () => {
-    mockCall.mockResolvedValueOnce({ position: 4 })
+    mockToolCallResponse({ position: 4 })
     const player = new LLMPlayer('p1', 'Alice')
 
     await player.act(makeRequest())
 
-    const [systemPrompt] = mockCall.mock.calls[0]
-    expect(systemPrompt).not.toContain('Player persona:')
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.system).not.toContain('Player persona:')
   })
 
-  it('propagates errors from LLMClient', async () => {
-    mockCall.mockRejectedValueOnce(new Error('API rate limit exceeded'))
+  it('propagates errors from generateText', async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error('API rate limit exceeded'))
     const player = new LLMPlayer('p1', 'Alice')
 
     await expect(player.act(makeRequest())).rejects.toThrow('API rate limit exceeded')
   })
 
-  it('converts action schema to JSON Schema for the tool definition', async () => {
-    mockCall.mockResolvedValueOnce({ team: ['p1', 'p2'] })
+  it('uses the action schema as tool parameters', async () => {
+    mockToolCallResponse({ team: ['p1', 'p2'] })
     const player = new LLMPlayer('p1', 'Alice')
 
     const request = makeRequest({
@@ -147,8 +152,7 @@ describe('LLMPlayer', () => {
 
     await player.act(request)
 
-    const [, , tool] = mockCall.mock.calls[0]
-    expect(tool.input_schema.properties.team).toBeDefined()
-    expect(tool.input_schema.properties.team.type).toBe('array')
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.tools.submit_action).toBeDefined()
   })
 })
