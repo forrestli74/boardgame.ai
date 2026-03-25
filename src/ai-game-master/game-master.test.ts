@@ -1,24 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
-import { AIGameMaster } from './game-master.js'
-import type { LLMClient } from './llm-client.js'
 import type { GameConfig } from '../core/types.js'
 import type { LLMGameResponse } from './schemas.js'
+
+// ---------------------------------------------------------------------------
+// Mock generateText from 'ai' module
+// ---------------------------------------------------------------------------
+
+const mockGenerateText = vi.fn()
+
+vi.mock('ai', async () => {
+  const actual = await vi.importActual('ai')
+  return {
+    ...actual,
+    generateText: mockGenerateText,
+  }
+})
+
+// Import after mock setup
+const { AIGameMaster } = await import('./game-master.js')
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeMockLLMClient(responses: LLMGameResponse[]): LLMClient {
-  let callIndex = 0
-  return {
-    call: vi.fn(async () => {
-      if (callIndex >= responses.length) {
-        throw new Error('No more mock responses')
-      }
-      return responses[callIndex++]
-    }),
-  } as unknown as LLMClient
+function mockLLMResponse(response: LLMGameResponse) {
+  mockGenerateText.mockResolvedValueOnce({
+    toolCalls: [{ args: response }],
+  })
 }
 
 const config: GameConfig = {
@@ -99,10 +108,14 @@ function makeTerminalResponse(): LLMGameResponse {
 // ---------------------------------------------------------------------------
 
 describe('AIGameMaster', () => {
+  beforeEach(() => {
+    mockGenerateText.mockReset()
+  })
+
   describe('init()', () => {
-    it('calls LLM and returns a GameResponse with action requests', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+    it('calls generateText and returns a GameResponse with action requests', async () => {
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       const response = await gm.init(config)
 
@@ -112,24 +125,22 @@ describe('AIGameMaster', () => {
     })
 
     it('converts JSON Schema actionSchema to Zod', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       const response = await gm.init(config)
       const schema = response.requests[0].actionSchema
 
-      // Valid action should pass
       const validResult = schema.safeParse({ row: 1, col: 2 })
       expect(validResult.success).toBe(true)
 
-      // Invalid action should fail (out of range)
       const invalidResult = schema.safeParse({ row: 5, col: 0 })
       expect(invalidResult.success).toBe(false)
     })
 
     it('formats events as GameEvent with source "game"', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       const response = await gm.init(config)
 
@@ -141,8 +152,8 @@ describe('AIGameMaster', () => {
     })
 
     it('sets isTerminal to false after init', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
 
@@ -150,25 +161,27 @@ describe('AIGameMaster', () => {
       expect(gm.getOutcome()).toBeNull()
     })
 
-    it('calls llmClient.call with correct arguments', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+    it('calls generateText with correct arguments', async () => {
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
 
-      expect(client.call).toHaveBeenCalledTimes(1)
-      const [systemPrompt, messages, tool] = (client.call as ReturnType<typeof vi.fn>).mock.calls[0]
-      expect(typeof systemPrompt).toBe('string')
-      expect(messages).toHaveLength(1)
-      expect(messages[0].role).toBe('user')
-      expect(tool.name).toBe('game_master_response')
+      expect(mockGenerateText).toHaveBeenCalledTimes(1)
+      const callArgs = mockGenerateText.mock.calls[0][0]
+      expect(callArgs.system).toBeDefined()
+      expect(callArgs.messages).toHaveLength(1)
+      expect(callArgs.messages[0].role).toBe('user')
+      expect(callArgs.toolChoice).toEqual({ type: 'tool', toolName: 'game_master_response' })
+      expect(callArgs.tools.game_master_response).toBeDefined()
     })
   })
 
   describe('handleResponse()', () => {
-    it('calls LLM with current state and returns updated GameResponse', async () => {
-      const client = makeMockLLMClient([makeInitResponse(), makeMoveResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+    it('calls generateText with current state and returns updated GameResponse', async () => {
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeMoveResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
       const response = await gm.handleResponse('p1', { row: 0, col: 0 })
@@ -178,20 +191,21 @@ describe('AIGameMaster', () => {
     })
 
     it('updates internal state across calls', async () => {
-      const client = makeMockLLMClient([makeInitResponse(), makeMoveResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeMoveResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 0 })
 
-      // The second LLM call should have received the state from the init response
-      const [, messages] = (client.call as ReturnType<typeof vi.fn>).mock.calls[1]
-      expect(messages[0].content).toContain('currentPlayer')
+      const secondCallArgs = mockGenerateText.mock.calls[1][0]
+      expect(secondCallArgs.messages[0].content).toContain('currentPlayer')
     })
 
     it('detects terminal state', async () => {
-      const client = makeMockLLMClient([makeInitResponse(), makeTerminalResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeTerminalResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 2 })
@@ -202,8 +216,8 @@ describe('AIGameMaster', () => {
 
   describe('getOutcome()', () => {
     it('returns null before terminal', async () => {
-      const client = makeMockLLMClient([makeInitResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
 
@@ -211,8 +225,9 @@ describe('AIGameMaster', () => {
     })
 
     it('returns outcome after terminal', async () => {
-      const client = makeMockLLMClient([makeInitResponse(), makeTerminalResponse()])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeTerminalResponse())
+      const gm = new AIGameMaster(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 2 })
@@ -225,8 +240,7 @@ describe('AIGameMaster', () => {
 
   describe('optionsSchema', () => {
     it('is an empty object schema', () => {
-      const client = makeMockLLMClient([])
-      const gm = new AIGameMaster(rulesDoc, client)
+      const gm = new AIGameMaster(rulesDoc)
 
       const result = gm.optionsSchema.safeParse({})
       expect(result.success).toBe(true)
@@ -239,8 +253,8 @@ describe('AIGameMaster', () => {
         ...makeInitResponse(),
         events: [{ description: 'Score update', data: 42 }],
       }
-      const client = makeMockLLMClient([response])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(response)
+      const gm = new AIGameMaster(rulesDoc)
 
       const result = await gm.init(config)
 
@@ -252,12 +266,24 @@ describe('AIGameMaster', () => {
         ...makeInitResponse(),
         events: [{ description: 'Null event', data: null }],
       }
-      const client = makeMockLLMClient([response])
-      const gm = new AIGameMaster(rulesDoc, client)
+      mockLLMResponse(response)
+      const gm = new AIGameMaster(rulesDoc)
 
       const result = await gm.init(config)
 
       expect(result.events[0].data).toEqual({ description: 'Null event', value: null })
+    })
+  })
+
+  describe('custom model', () => {
+    it('passes the model string to generateText', async () => {
+      mockLLMResponse(makeInitResponse())
+      const gm = new AIGameMaster(rulesDoc, 'openai:gpt-4o')
+
+      await gm.init(config)
+
+      const callArgs = mockGenerateText.mock.calls[0][0]
+      expect(callArgs.model).toBeDefined()
     })
   })
 })
