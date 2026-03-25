@@ -1,18 +1,13 @@
+import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Game } from '../core/game.js'
 import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../core/types.js'
 import type { GameEvent } from '../core/events.js'
+import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
 import { jsonSchemaToZod, LLMGameResponseSchema } from './schemas.js'
 import type { JsonSchema, LLMGameResponse } from './schemas.js'
-import type { LLMClient } from './llm-client.js'
-import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildToolDefinition } from './prompts.js'
+import { buildSystemPrompt, buildInitMessage, buildActionMessage } from './prompts.js'
 
-/**
- * AI Game Master — uses an LLM to interpret a rules document and manage
- * game state, action requests, and terminal conditions.
- *
- * Implements Game with async init/handleResponse (LLM calls).
- */
 export class AIGameMaster implements Game {
   readonly optionsSchema = z.object({})
 
@@ -23,7 +18,7 @@ export class AIGameMaster implements Game {
 
   constructor(
     private readonly rulesDoc: string,
-    private readonly llmClient: LLMClient,
+    private readonly model: string = DEFAULT_MODEL,
   ) {}
 
   async init(config: GameConfig): Promise<GameResponse> {
@@ -31,9 +26,8 @@ export class AIGameMaster implements Game {
 
     const systemPrompt = buildSystemPrompt()
     const userMessage = buildInitMessage(this.rulesDoc, config)
-    const tool = buildToolDefinition()
 
-    const raw = await this.llmClient.call(systemPrompt, [{ role: 'user', content: userMessage }], tool)
+    const raw = await this.callLLM(systemPrompt, userMessage)
     const parsed = LLMGameResponseSchema.parse(raw)
 
     return this.processLLMResponse(parsed)
@@ -42,9 +36,8 @@ export class AIGameMaster implements Game {
   async handleResponse(playerId: string, action: unknown): Promise<GameResponse> {
     const systemPrompt = buildSystemPrompt()
     const userMessage = buildActionMessage(this.rulesDoc, this.state, playerId, action)
-    const tool = buildToolDefinition()
 
-    const raw = await this.llmClient.call(systemPrompt, [{ role: 'user', content: userMessage }], tool)
+    const raw = await this.callLLM(systemPrompt, userMessage)
     const parsed = LLMGameResponseSchema.parse(raw)
 
     return this.processLLMResponse(parsed)
@@ -58,25 +51,37 @@ export class AIGameMaster implements Game {
     return this.outcome
   }
 
-  /**
-   * Converts the raw LLM response into internal state updates and a GameResponse.
-   */
+  private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
+    const result = await generateText({
+      model: registry.languageModel(this.model),
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+      maxTokens: 4096,
+      tools: {
+        game_master_response: tool({
+          description: 'Return the updated game state and next actions',
+          parameters: LLMGameResponseSchema,
+        }),
+      },
+      toolChoice: { type: 'tool', toolName: 'game_master_response' },
+    })
+
+    return result.toolCalls[0].args
+  }
+
   private processLLMResponse(llmResponse: LLMGameResponse): GameResponse {
-    // Update internal state
     this.state = llmResponse.state
     this.terminal = llmResponse.isTerminal
     this.outcome = llmResponse.outcome
       ? { scores: llmResponse.outcome.scores, metadata: llmResponse.outcome.metadata }
       : null
 
-    // Convert action requests: JSON Schema actionSchema -> Zod schema
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
       view: req.view,
       actionSchema: jsonSchemaToZod(req.actionSchema as unknown as JsonSchema),
     }))
 
-    // Format events as GameEvent (source: 'game')
     const timestamp = new Date().toISOString()
     const events: GameEvent[] = llmResponse.events.map((evt) => ({
       source: 'game' as const,
