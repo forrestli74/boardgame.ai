@@ -1,5 +1,4 @@
 import type { GameConfig } from '../core/types.js'
-import type { ToolDefinition } from './llm-client.js'
 
 /**
  * System prompt instructing the LLM to act as a rules-faithful game master.
@@ -84,57 +83,3 @@ Action: ${JSON.stringify(action, null, 2)}
 6. Otherwise, determine which player(s) must act next and return their action requests with appropriate views and action schemas.`
 }
 
-/**
- * Anthropic tool definition for the game master structured response.
- */
-export function buildToolDefinition(): ToolDefinition {
-  return {
-    name: 'game_master_response',
-    description: 'Return the updated game state and next actions',
-    input_schema: {
-      type: 'object',
-      properties: {
-        state: { type: 'object', description: 'Complete game state' },
-        requests: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              playerId: { type: 'string' },
-              view: { description: 'What this player can see' },
-              actionSchema: {
-                type: 'object',
-                description: 'JSON Schema for valid actions',
-              },
-            },
-            required: ['playerId', 'view', 'actionSchema'],
-          },
-        },
-        events: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              description: { type: 'string' },
-              data: { description: 'Structured event data' },
-            },
-            required: ['description', 'data'],
-          },
-        },
-        isTerminal: { type: 'boolean' },
-        outcome: {
-          type: 'object',
-          properties: {
-            scores: {
-              type: 'object',
-              description: 'Player ID to score mapping',
-            },
-            metadata: { type: 'object' },
-          },
-          required: ['scores'],
-        },
-      },
-      required: ['state', 'requests', 'events', 'isTerminal'],
-    },
-  }
-}
