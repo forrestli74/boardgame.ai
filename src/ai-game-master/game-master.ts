@@ -53,6 +53,7 @@ export class AIGameMaster implements Game {
 
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
     const result = await generateText({
+      // Cast: model is a 'provider:model' string; registry expects a branded type
       model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -66,7 +67,9 @@ export class AIGameMaster implements Game {
       toolChoice: { type: 'tool', toolName: 'game_master_response' },
     })
 
-    return result.toolCalls[0].input
+    const call = result.toolCalls[0]
+    if (!call) throw new Error('LLM returned no tool call')
+    return call.input
   }
 
   private processLLMResponse(llmResponse: LLMGameResponse): GameResponse {

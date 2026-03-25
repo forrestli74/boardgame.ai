@@ -48,6 +48,7 @@ export class LLMPlayer implements Player {
     const userMessage = `Current game state (your view):\n\n${viewText}\n\nChoose your action.`
 
     const result = await generateText({
+      // Cast: model is a 'provider:model' string; registry expects a branded type
       model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -61,6 +62,8 @@ export class LLMPlayer implements Player {
       toolChoice: { type: 'tool', toolName: 'submit_action' },
     })
 
-    return result.toolCalls[0].input
+    const call = result.toolCalls[0]
+    if (!call) throw new Error('LLM returned no tool call')
+    return call.input
   }
 }
