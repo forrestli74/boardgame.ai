@@ -8,7 +8,16 @@
       "Bash(git commit:*)",
       "Bash(/Users/jiaqili/.claude/skills/tide-tasks/tide-list-tasks.sh)",
       "Bash(/Users/jiaqili/.claude/skills/tide/tide-init.sh)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(/Users/jiaqili/.claude/skills/tide/tide-list-tasks.sh)",
+      "mcp__context7__query-docs",
+      "Bash(/Users/jiaqili/.claude/skills/tide-tasks/../tide-tasks/tide-list-tasks.sh)",
+      "mcp__context7__resolve-library-id",
+      "Read(//Users/jiaqili/**)",
+      "Read(//Users/jiaqili/git/boardgame.ai2/**)",
+      "WebFetch(domain:ai-sdk.dev)",
+      "WebFetch(domain:openrouter.ai)",
+      "WebFetch(domain:ai.google.dev)"
     ]
   }
 }

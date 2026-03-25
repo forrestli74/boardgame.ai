@@ -13,7 +13,10 @@
   "license": "ISC",
   "packageManager": "pnpm@10.32.1",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
+    "@ai-sdk/anthropic": "^3.0.64",
+    "@ai-sdk/google": "^3.0.53",
+    "@ai-sdk/openai": "^3.0.48",
+    "ai": "^6.0.138",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },

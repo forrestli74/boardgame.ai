@@ -36,9 +36,10 @@ Implement a Player that uses an LLM to choose actions. The player receives an `A
 
 ## Work History
 
-- 2026-03-24: Implemented `LLMPlayer` in `src/players/llm-player.ts` and tests in `src/players/llm-player.test.ts`. 7 tests passing, typecheck clean. Key decisions:
+- 2026-03-24: Implemented `LLMPlayer` in `src/players/llm-player.ts` and tests in `src/players/llm-player.test.ts`. 8 tests passing, typecheck clean. Key decisions:
   - Uses Zod v4 `toJSONSchema()` to convert the action schema into JSON Schema for the LLM tool call
   - System prompt instructs step-by-step reasoning before choosing an action
   - `persona` option allows injecting strategy hints per-player
   - String views passed through as-is; object views JSON-stringified
   - Errors from LLM client propagate naturally (engine handles retries)
+- 2026-03-24: Decomposed into T-LLM-PLAYER-IMPL and T-LLM-PLAYER-TEST sub-tasks, both resolved. All acceptance criteria met.

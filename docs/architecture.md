@@ -57,6 +57,19 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 - Remaining pending requests stay active
 - Game may return overlapping requests — engine skips duplicates
 
+## AI Game Master (`src/ai-game-master/`)
+
+LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript, it feeds a markdown rules document to an LLM and asks it to manage game state.
+
+- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + `llmClient`. Each `init()`/`handleResponse()` call sends the full rules + state to the LLM (stateless — no conversation history).
+- **`llm-client.ts`** — Thin Anthropic SDK wrapper. Uses forced tool use (`tool_choice: { type: 'tool', name: ... }`) for structured output.
+- **`prompts.ts`** — System prompt and message builders for game master LLM calls.
+- **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
+
+## LLM Player (`src/players/llm-player.ts`)
+
+LLM-powered Player implementation. Receives an `ActionRequest`, converts the Zod action schema to JSON Schema via `z.toJSONSchema()`, and uses forced tool use to get a structured action from the LLM. Supports optional `persona` string. Stateless per request.
+
 ## Project Structure
 
 ```
@@ -70,27 +83,25 @@ src/
 │   ├── recorder.ts           # JSONL writer via Pino
 │   └── *.test.ts             # Co-located tests
 │
-├── players/                  # Player implementations (Phase 3+)
+├── ai-game-master/           # LLM-powered Game implementation
+│   ├── game-master.ts        # AIGameMaster implements Game
+│   ├── llm-client.ts         # Anthropic SDK wrapper with forced tool use
+│   ├── prompts.ts            # Prompt builders
+│   ├── schemas.ts            # LLM response schema + JSON Schema ↔ Zod
+│   └── *.test.ts             # Co-located tests
+│
+├── players/                  # Player implementations
 │   └── llm-player.ts         # LLM-backed agent
 │
-├── games/                    # Game implementations (Phase 2+)
-│   └── avalon/
-│       ├── game.ts           # AvalonGame implements Game
-│       ├── roles.ts          # Role assignment
-│       └── prompts.ts        # Role-specific prompts
-│
-├── runner/                   # Execution (Phase 4–5)
-│   ├── game-runner.ts
-│   └── batch-runner.ts
-│
-└── cli/                      # CLI entry point (Phase 4)
-    └── index.ts
+rules/                        # Markdown rules documents for AIGameMaster
+├── tic-tac-toe.md
+└── avalon.md
 ```
 
 ## Anti-Patterns
 
-- **Avalon logic in Engine** — all game rules live in the Game implementation, never in Engine
+- **Game logic in Engine** — all game rules live in the Game implementation, never in Engine
 - **Global mutable state** — each game holds its own state; each Engine instance is independent
-- **LLMPlayer knowing about Avalon** — Player receives opaque view + schema, no game-specific logic
+- **Player knowing about specific games** — Player receives opaque view + schema, no game-specific logic
 - **Untyped LLM responses** — always validate with `actionSchema.parse()`; never cast `as ActionType`
 - **Synchronous batch** — use `Promise.allSettled` + `p-limit`; respect API rate limits
