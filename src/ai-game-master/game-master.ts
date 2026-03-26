@@ -4,9 +4,9 @@ import type { Game } from '../core/game.js'
 import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../core/types.js'
 import type { GameEvent } from '../core/events.js'
 import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
-import { jsonSchemaToZod, LLMGameResponseSchema } from './schemas.js'
-import type { JsonSchema, LLMGameResponse } from './schemas.js'
-import { buildSystemPrompt, buildInitMessage, buildActionMessage } from './prompts.js'
+import { jsonSchemaToZod, LLMGameResponseSchema, parseState, parseView, parseActionSchema, parseEventData, scoresToRecord } from './schemas.js'
+import type { LLMGameResponse } from './schemas.js'
+import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildBatchActionMessage } from './prompts.js'
 
 export class AIGameMaster implements Game {
   readonly optionsSchema = z.object({})
@@ -15,6 +15,8 @@ export class AIGameMaster implements Game {
   private terminal = false
   private outcome: GameOutcome | null = null
   private gameId = ''
+  private pendingPlayerIds = new Set<string>()
+  private responseQueue: Array<{ playerId: string; action: unknown }> = []
 
   constructor(
     private readonly rulesDoc: string,
@@ -34,8 +36,17 @@ export class AIGameMaster implements Game {
   }
 
   async handleResponse(playerId: string, action: unknown): Promise<GameResponse> {
+    this.responseQueue.push({ playerId, action })
+    this.pendingPlayerIds.delete(playerId)
+
+    if (this.pendingPlayerIds.size > 0) {
+      return { requests: [], events: [] }
+    }
+
     const systemPrompt = buildSystemPrompt()
-    const userMessage = buildActionMessage(this.rulesDoc, this.state, playerId, action)
+    const userMessage = this.responseQueue.length === 1
+      ? buildActionMessage(this.rulesDoc, this.state, this.responseQueue[0].playerId, this.responseQueue[0].action)
+      : buildBatchActionMessage(this.rulesDoc, this.state, this.responseQueue)
 
     const raw = await this.callLLM(systemPrompt, userMessage)
     const parsed = LLMGameResponseSchema.parse(raw)
@@ -52,46 +63,57 @@ export class AIGameMaster implements Game {
   }
 
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
-    const result = await generateText({
-      // Cast: model is a 'provider:model' string; registry expects a branded type
-      model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-      maxOutputTokens: 4096,
-      tools: {
-        game_master_response: tool({
-          description: 'Return the updated game state and next actions',
-          inputSchema: LLMGameResponseSchema,
-        }),
-      },
-      toolChoice: { type: 'tool', toolName: 'game_master_response' },
-    })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await generateText({
+        // Cast: model is a 'provider:model' string; registry expects a branded type
+        model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+        maxOutputTokens: 16384,
+        tools: {
+          game_master_response: tool({
+            description: 'Return the updated game state and next actions',
+            inputSchema: LLMGameResponseSchema,
+          }),
+        },
+        toolChoice: { type: 'tool', toolName: 'game_master_response' },
+        providerOptions: {
+          google: { structuredOutputs: false },
+        },
+      })
 
-    const call = result.toolCalls[0]
-    if (!call) throw new Error('LLM returned no tool call')
-    return call.input
+      const call = result.toolCalls[0]
+      if (call) return call.input
+    }
+    throw new Error('LLM returned no tool call after 3 attempts')
   }
 
   private processLLMResponse(llmResponse: LLMGameResponse): GameResponse {
-    this.state = llmResponse.state
+    this.state = parseState(llmResponse.state)
     this.terminal = llmResponse.isTerminal
     this.outcome = llmResponse.outcome
-      ? { scores: llmResponse.outcome.scores, metadata: llmResponse.outcome.metadata }
+      ? { scores: scoresToRecord(llmResponse.outcome.scores) }
       : null
 
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
-      view: req.view,
-      actionSchema: jsonSchemaToZod(req.actionSchema as unknown as JsonSchema),
+      view: parseView(req.view),
+      actionSchema: jsonSchemaToZod(parseActionSchema(req.actionSchema)),
     }))
 
+    this.pendingPlayerIds = new Set(requests.map(r => r.playerId))
+    this.responseQueue = []
+
     const timestamp = new Date().toISOString()
-    const events: GameEvent[] = llmResponse.events.map((evt) => ({
-      source: 'game' as const,
-      gameId: this.gameId,
-      data: { description: evt.description, ...((evt.data && typeof evt.data === 'object') ? evt.data as Record<string, unknown> : { value: evt.data }) },
-      timestamp,
-    }))
+    const events: GameEvent[] = llmResponse.events.map((evt) => {
+      const data = parseEventData(evt.data)
+      return {
+        source: 'game' as const,
+        gameId: this.gameId,
+        data: { description: evt.description, ...((data && typeof data === 'object') ? data as Record<string, unknown> : { value: data }) },
+        timestamp,
+      }
+    })
 
     return { requests, events }
   }

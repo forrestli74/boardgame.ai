@@ -28,6 +28,10 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 - [ ] **AVLN-07**: Role-specific visibility → T-AVALON-ROLES
 - [ ] **AVLN-08**: Player view isolation → T-AVALON-ROLES
 
+### Randomness (Phase 2)
+
+- [ ] **RAND-01**: Pre-compute random decisions in TypeScript (seeded PRNG), pass as facts to LLM — LLM must not generate its own randomness
+
 ### AI Agents (Phase 3)
 
 - [ ] **AGENT-01**: LLM player with configurable model → T-LLM-PLAYER

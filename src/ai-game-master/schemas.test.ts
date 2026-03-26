@@ -112,38 +112,38 @@ describe('jsonSchemaToZod', () => {
     )
   })
 
-  it('throws when type is missing', () => {
-    expect(() => jsonSchemaToZod({} as JsonSchema)).toThrow(
-      'Unsupported JSON Schema type: undefined',
-    )
+  it('returns z.unknown() when type is missing', () => {
+    const schema = jsonSchemaToZod({} as JsonSchema)
+    expect(schema.safeParse('anything').success).toBe(true)
+    expect(schema.safeParse(42).success).toBe(true)
   })
 })
 
 describe('LLMGameResponseSchema', () => {
   it('validates a complete LLM response', () => {
     const response = {
-      state: { round: 1, phase: 'team_proposal' },
+      state: JSON.stringify({ round: 1, phase: 'team_proposal' }),
       requests: [
         {
           playerId: 'p1',
-          view: { role: 'merlin', knownEvil: ['p3'] },
-          actionSchema: {
+          view: JSON.stringify({ role: 'merlin', knownEvil: ['p3'] }),
+          actionSchema: JSON.stringify({
             type: 'object',
             properties: {
               team: { type: 'array', items: { type: 'string' } },
             },
             required: ['team'],
-          },
+          }),
         },
       ],
       events: [
-        { description: 'Round 1 started', data: { round: 1 } },
+        { description: 'Round 1 started', data: JSON.stringify({ round: 1 }) },
       ],
       isTerminal: false,
     }
 
     const parsed = LLMGameResponseSchema.parse(response)
-    expect(parsed.state).toEqual({ round: 1, phase: 'team_proposal' })
+    expect(parsed.state).toBe(response.state)
     expect(parsed.requests).toHaveLength(1)
     expect(parsed.requests[0].playerId).toBe('p1')
     expect(parsed.isTerminal).toBe(false)
@@ -152,22 +152,21 @@ describe('LLMGameResponseSchema', () => {
 
   it('validates a terminal response with outcome', () => {
     const response = {
-      state: { round: 5, phase: 'complete' },
+      state: JSON.stringify({ round: 5, phase: 'complete' }),
       requests: [],
-      events: [{ description: 'Game over', data: null }],
+      events: [{ description: 'Game over', data: JSON.stringify(null) }],
       isTerminal: true,
       outcome: {
-        scores: { p1: 1, p2: 0 },
-        metadata: { winner: 'good' },
+        scores: [{ playerId: 'p1', score: 1 }, { playerId: 'p2', score: 0 }],
       },
     }
 
     const parsed = LLMGameResponseSchema.parse(response)
     expect(parsed.isTerminal).toBe(true)
-    expect(parsed.outcome?.scores).toEqual({ p1: 1, p2: 0 })
+    expect(parsed.outcome?.scores).toEqual([{ playerId: 'p1', score: 1 }, { playerId: 'p2', score: 0 }])
   })
 
   it('rejects invalid response missing required fields', () => {
-    expect(() => LLMGameResponseSchema.parse({ state: {} })).toThrow()
+    expect(() => LLMGameResponseSchema.parse({ state: '{}' })).toThrow()
   })
 })

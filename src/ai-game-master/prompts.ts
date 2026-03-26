@@ -17,7 +17,10 @@ Responsibilities:
 
 Output format:
 - Always respond using the provided tool. Never respond with plain text.
-- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.`
+- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.
+- The "state", "view", "actionSchema", and event "data" fields must be JSON-encoded strings (use JSON.stringify), not raw objects. For example: "state": "{\"board\":[[null,null,null]],\"currentPlayer\":\"p1\"}"
+- The "actionSchema" field must be a JSON Schema string with "type", "properties", and "required" fields.
+- The "scores" field in outcome is an array of {playerId, score} objects, not a map.`
 }
 
 /**
@@ -81,5 +84,44 @@ Action: ${JSON.stringify(action, null, 2)}
 4. Check for terminal conditions (win/loss/draw).
 5. If the game is over, set isTerminal to true and provide the outcome with scores.
 6. Otherwise, determine which player(s) must act next and return their action requests with appropriate views and action schemas.`
+}
+
+/**
+ * User message for handling multiple simultaneous player actions in a batch.
+ */
+export function buildBatchActionMessage(
+  rulesDoc: string,
+  state: Record<string, unknown>,
+  actions: Array<{ playerId: string; action: unknown }>,
+): string {
+  const actionList = actions.map(({ playerId, action }) => {
+    if (action === null) {
+      return `- Player "${playerId}": Failed to submit a valid action (treat as abstain/skip per rules)`
+    }
+    return `- Player "${playerId}": ${JSON.stringify(action, null, 2)}`
+  }).join('\n')
+
+  return `Multiple players have submitted actions simultaneously.
+
+## Rules Document
+
+${rulesDoc}
+
+## Current Game State
+
+${JSON.stringify(state, null, 2)}
+
+## Player Actions (in order received)
+
+${actionList}
+
+## Instructions
+
+1. Validate each action against the rules and current state.
+2. For any invalid action, emit an event explaining the rejection and re-request that player's turn.
+3. For valid actions, apply them all to the game state in the order listed above.
+4. After applying all actions, check for terminal conditions (win/loss/draw).
+5. If the game is over, set isTerminal to true and provide the outcome with scores.
+6. Otherwise, determine which player(s) must act next and return their action requests.`
 }
 

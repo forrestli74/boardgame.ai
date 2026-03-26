@@ -41,50 +41,89 @@ const config: GameConfig = {
 
 const rulesDoc = '# Tic-Tac-Toe\nTwo players take turns placing X and O on a 3x3 grid.'
 
+const config3Players: GameConfig = {
+  gameId: 'test-game-2',
+  seed: 42,
+  players: [
+    { id: 'p1', name: 'Alice' },
+    { id: 'p2', name: 'Bob' },
+    { id: 'p3', name: 'Charlie' },
+  ],
+}
+
+const emptyBoard = [['', '', ''], ['', '', ''], ['', '', '']]
+const actionSchemaStr = JSON.stringify({
+  type: 'object',
+  properties: {
+    row: { type: 'integer', minimum: 0, maximum: 2 },
+    col: { type: 'integer', minimum: 0, maximum: 2 },
+  },
+  required: ['row', 'col'],
+})
+
 function makeInitResponse(): LLMGameResponse {
   return {
-    state: { board: [['', '', ''], ['', '', ''], ['', '', '']], currentPlayer: 'p1' },
+    state: JSON.stringify({ board: emptyBoard, currentPlayer: 'p1' }),
     requests: [
       {
         playerId: 'p1',
-        view: { board: [['', '', ''], ['', '', ''], ['', '', '']] },
-        actionSchema: {
-          type: 'object',
-          properties: {
-            row: { type: 'integer', minimum: 0, maximum: 2 },
-            col: { type: 'integer', minimum: 0, maximum: 2 },
-          },
-          required: ['row', 'col'],
-        },
+        view: JSON.stringify({ board: emptyBoard }),
+        actionSchema: actionSchemaStr,
       },
     ],
     events: [
-      { description: 'Game started', data: { type: 'game_start' } },
+      { description: 'Game started', data: JSON.stringify({ type: 'game_start' }) },
     ],
     isTerminal: false,
     outcome: undefined,
   }
 }
 
-function makeMoveResponse(): LLMGameResponse {
+function makeMultiPlayerInitResponse(): LLMGameResponse {
   return {
-    state: { board: [['X', '', ''], ['', '', ''], ['', '', '']], currentPlayer: 'p2' },
+    state: JSON.stringify({ phase: 'voting', votes: {} }),
+    requests: [
+      { playerId: 'p1', view: JSON.stringify({ phase: 'voting' }), actionSchema: voteSchemaStr },
+      { playerId: 'p2', view: JSON.stringify({ phase: 'voting' }), actionSchema: voteSchemaStr },
+      { playerId: 'p3', view: JSON.stringify({ phase: 'voting' }), actionSchema: voteSchemaStr },
+    ],
+    events: [{ description: 'Voting phase started', data: JSON.stringify({ type: 'phase_start' }) }],
+    isTerminal: false,
+    outcome: undefined,
+  }
+}
+
+const voteSchemaStr = JSON.stringify({
+  type: 'object',
+  properties: { vote: { type: 'string', enum: ['approve', 'reject'] } },
+  required: ['vote'],
+})
+
+function makeVoteResultResponse(): LLMGameResponse {
+  return {
+    state: JSON.stringify({ phase: 'mission', votes: { p1: 'approve', p2: 'reject', p3: 'approve' } }),
+    requests: [
+      { playerId: 'p1', view: JSON.stringify({ phase: 'mission' }), actionSchema: actionSchemaStr },
+    ],
+    events: [{ description: 'Vote passed 2-1', data: JSON.stringify({ type: 'vote_result', passed: true }) }],
+    isTerminal: false,
+    outcome: undefined,
+  }
+}
+
+function makeMoveResponse(): LLMGameResponse {
+  const board = [['X', '', ''], ['', '', ''], ['', '', '']]
+  return {
+    state: JSON.stringify({ board, currentPlayer: 'p2' }),
     requests: [
       {
         playerId: 'p2',
-        view: { board: [['X', '', ''], ['', '', ''], ['', '', '']] },
-        actionSchema: {
-          type: 'object',
-          properties: {
-            row: { type: 'integer', minimum: 0, maximum: 2 },
-            col: { type: 'integer', minimum: 0, maximum: 2 },
-          },
-          required: ['row', 'col'],
-        },
+        view: JSON.stringify({ board }),
+        actionSchema: actionSchemaStr,
       },
     ],
     events: [
-      { description: 'Player p1 placed X at (0,0)', data: { type: 'move', row: 0, col: 0, mark: 'X' } },
+      { description: 'Player p1 placed X at (0,0)', data: JSON.stringify({ type: 'move', row: 0, col: 0, mark: 'X' }) },
     ],
     isTerminal: false,
     outcome: undefined,
@@ -93,13 +132,13 @@ function makeMoveResponse(): LLMGameResponse {
 
 function makeTerminalResponse(): LLMGameResponse {
   return {
-    state: { board: [['X', 'X', 'X'], ['O', 'O', ''], ['', '', '']], currentPlayer: null },
+    state: JSON.stringify({ board: [['X', 'X', 'X'], ['O', 'O', ''], ['', '', '']], currentPlayer: null }),
     requests: [],
     events: [
-      { description: 'Player p1 wins', data: { type: 'game_end', winner: 'p1' } },
+      { description: 'Player p1 wins', data: JSON.stringify({ type: 'game_end', winner: 'p1' }) },
     ],
     isTerminal: true,
-    outcome: { scores: { p1: 1, p2: 0 } },
+    outcome: { scores: [{ playerId: 'p1', score: 1 }, { playerId: 'p2', score: 0 }] },
   }
 }
 
@@ -121,7 +160,7 @@ describe('AIGameMaster', () => {
 
       expect(response.requests).toHaveLength(1)
       expect(response.requests[0].playerId).toBe('p1')
-      expect(response.requests[0].view).toEqual({ board: [['', '', ''], ['', '', ''], ['', '', '']] })
+      expect(response.requests[0].view).toEqual({ board: emptyBoard })
     })
 
     it('converts JSON Schema actionSchema to Zod', async () => {
@@ -251,7 +290,7 @@ describe('AIGameMaster', () => {
     it('handles primitive event data by wrapping in value key', async () => {
       const response: LLMGameResponse = {
         ...makeInitResponse(),
-        events: [{ description: 'Score update', data: 42 }],
+        events: [{ description: 'Score update', data: '42' }],
       }
       mockLLMResponse(response)
       const gm = new AIGameMaster(rulesDoc)
@@ -264,7 +303,7 @@ describe('AIGameMaster', () => {
     it('handles null event data', async () => {
       const response: LLMGameResponse = {
         ...makeInitResponse(),
-        events: [{ description: 'Null event', data: null }],
+        events: [{ description: 'Null event', data: 'null' }],
       }
       mockLLMResponse(response)
       const gm = new AIGameMaster(rulesDoc)
@@ -278,12 +317,111 @@ describe('AIGameMaster', () => {
   describe('custom model', () => {
     it('passes the model string to generateText', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc, 'openai:gpt-4o')
+      const gm = new AIGameMaster(rulesDoc, 'google:gemini-2.0-flash')
 
       await gm.init(config)
 
       const callArgs = mockGenerateText.mock.calls[0][0]
       expect(callArgs.model).toBeDefined()
+    })
+  })
+
+  describe('response batching', () => {
+    it('single response behaves same as before (no batching)', async () => {
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeMoveResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config)
+      const response = await gm.handleResponse('p1', { row: 0, col: 0 })
+
+      expect(response.requests).toHaveLength(1)
+      expect(response.requests[0].playerId).toBe('p2')
+      expect(mockGenerateText).toHaveBeenCalledTimes(2)
+    })
+
+    it('intermediate responses return no-op, final triggers LLM call', async () => {
+      mockLLMResponse(makeMultiPlayerInitResponse())
+      mockLLMResponse(makeVoteResultResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config3Players)
+      const callsAfterInit = mockGenerateText.mock.calls.length
+
+      const r1 = await gm.handleResponse('p2', { vote: 'reject' })
+      expect(r1.requests).toHaveLength(0)
+      expect(r1.events).toHaveLength(0)
+      expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit)
+
+      const r2 = await gm.handleResponse('p1', { vote: 'approve' })
+      expect(r2.requests).toHaveLength(0)
+      expect(r2.events).toHaveLength(0)
+      expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit)
+
+      const r3 = await gm.handleResponse('p3', { vote: 'approve' })
+      expect(r3.requests).toHaveLength(1)
+      expect(r3.events).toHaveLength(1)
+      expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit + 1)
+    })
+
+    it('uses buildBatchActionMessage for multiple responses', async () => {
+      mockLLMResponse(makeMultiPlayerInitResponse())
+      mockLLMResponse(makeVoteResultResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config3Players)
+      await gm.handleResponse('p1', { vote: 'approve' })
+      await gm.handleResponse('p2', { vote: 'reject' })
+      await gm.handleResponse('p3', { vote: 'approve' })
+
+      const batchCallArgs = mockGenerateText.mock.calls[1][0]
+      expect(batchCallArgs.messages[0].content).toContain('Multiple players have submitted actions simultaneously')
+    })
+
+    it('uses buildActionMessage for single queued response', async () => {
+      mockLLMResponse(makeInitResponse())
+      mockLLMResponse(makeMoveResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config)
+      await gm.handleResponse('p1', { row: 0, col: 0 })
+
+      const callArgs = mockGenerateText.mock.calls[1][0]
+      expect(callArgs.messages[0].content).toContain('A player has submitted an action')
+      expect(callArgs.messages[0].content).not.toContain('Multiple players')
+    })
+
+    it('handles null action in batch', async () => {
+      mockLLMResponse(makeMultiPlayerInitResponse())
+      mockLLMResponse(makeVoteResultResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config3Players)
+      await gm.handleResponse('p1', { vote: 'approve' })
+      await gm.handleResponse('p2', null)
+      await gm.handleResponse('p3', { vote: 'approve' })
+
+      const batchCallArgs = mockGenerateText.mock.calls[1][0]
+      expect(batchCallArgs.messages[0].content).toContain('Failed to submit a valid action')
+    })
+
+    it('preserves order of responses in batch', async () => {
+      mockLLMResponse(makeMultiPlayerInitResponse())
+      mockLLMResponse(makeVoteResultResponse())
+      const gm = new AIGameMaster(rulesDoc)
+
+      await gm.init(config3Players)
+      await gm.handleResponse('p3', { vote: 'approve' })
+      await gm.handleResponse('p1', { vote: 'approve' })
+      await gm.handleResponse('p2', { vote: 'reject' })
+
+      const batchCallArgs = mockGenerateText.mock.calls[1][0]
+      const content = batchCallArgs.messages[0].content as string
+      const p3Idx = content.indexOf('Player "p3"')
+      const p1Idx = content.indexOf('Player "p1"')
+      const p2Idx = content.indexOf('Player "p2"')
+      expect(p3Idx).toBeLessThan(p1Idx)
+      expect(p1Idx).toBeLessThan(p2Idx)
     })
   })
 })
