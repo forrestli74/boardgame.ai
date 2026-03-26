@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:record": "VCR_MODE=record vitest run",
+    "test:ci": "VCR_MODE=lockdown vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts"
   },
@@ -13,15 +15,14 @@
   "license": "ISC",
   "packageManager": "pnpm@10.32.1",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.64",
     "@ai-sdk/google": "^3.0.53",
-    "@ai-sdk/openai": "^3.0.48",
     "ai": "^6.0.138",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "nock": "^14.0.11",
     "pino-pretty": "^13.1.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

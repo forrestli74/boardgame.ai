@@ -7,13 +7,16 @@ import type { ActionRequest, GameConfig } from '../core/types.js'
 import { Recorder } from '../core/recorder.js'
 import { AIGameMaster } from './game-master.js'
 import { Engine } from '../core/engine.js'
+import { useHttpRecording } from '../test-utils/http-recording.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const RULES_PATH = join(__dirname, '../../rules/tic-tac-toe.md')
 const LOG_FILE = '/tmp/boardgame-ai-gm-integration-test.jsonl'
 
-const SKIP = !process.env.ANTHROPIC_API_KEY
+// Skip unless API key is available or cassettes have been recorded
+const CASSETTE_DIR = join(__dirname, '__fixtures__')
+const SKIP = !process.env.GEMINI_API_KEY && !existsSync(CASSETTE_DIR)
 
 /**
  * Fixed player that returns predetermined Tic-Tac-Toe moves.
@@ -38,6 +41,7 @@ afterEach(() => {
 
 describe.skipIf(SKIP)('integration: AI Game Master', () => {
   it('plays tic-tac-toe to completion', async () => {
+    await useHttpRecording()
     const rulesDoc = readFileSync(RULES_PATH, 'utf-8')
     const game = new AIGameMaster(rulesDoc)
     const recorder = new Recorder('ttt-integration-1', LOG_FILE)
