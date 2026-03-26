@@ -1,12 +1,10 @@
 import { createProviderRegistry } from 'ai'
-import { anthropic } from '@ai-sdk/anthropic'
-import { openai } from '@ai-sdk/openai'
-import { google } from '@ai-sdk/google'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+
+const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY })
 
 export const registry = createProviderRegistry({
-  anthropic,
-  openai,
   google,
 })
 
-export const DEFAULT_MODEL = 'anthropic:claude-sonnet-4-20250514'
+export const DEFAULT_MODEL = 'google:gemini-2.5-flash'

@@ -56,22 +56,23 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 - Engine processes the first response that resolves
 - Remaining pending requests stay active
 - Game may return overlapping requests — engine skips duplicates
+- **AIGameMaster batching**: When multiple players must act simultaneously, AIGameMaster batches their responses into a single LLM call. Intermediate `handleResponse` calls return no-ops (`{ requests: [], events: [] }`). The final response (when all pending players have responded) triggers the actual LLM call with all actions.
 
 ## AI Game Master (`src/ai-game-master/`)
 
 LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript, it feeds a markdown rules document to an LLM and asks it to manage game state.
 
-- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'anthropic:claude-sonnet-4-20250514'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
+- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'google:gemini-2.5-flash'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
 - **`prompts.ts`** — System prompt and message builders for game master LLM calls.
 - **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
 
 ## LLM Player (`src/players/llm-player.ts`)
 
-LLM-powered Player implementation. Receives an `ActionRequest` and uses the Vercel AI SDK's `generateText()` with forced tool use to get a structured action from the LLM. Supports optional `persona` string and configurable model via `'provider:model'` string (default: `'anthropic:claude-sonnet-4-20250514'`). Stateless per request.
+LLM-powered Player implementation. Receives an `ActionRequest` and uses the Vercel AI SDK's `generateText()` with forced tool use to get a structured action from the LLM. Supports optional `persona` string and configurable model via `'provider:model'` string (default: `'google:gemini-2.5-flash'`). Stateless per request.
 
 ## Provider Registry (`src/core/llm-registry.ts`)
 
-Shared provider registry built with Vercel AI SDK's `createProviderRegistry()`. Registers Anthropic, OpenAI, and Google providers. Resolves `'provider:model'` strings (e.g., `'anthropic:claude-sonnet-4-20250514'`, `'openai:gpt-4o'`) to model instances. API keys are read from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
+Shared provider registry built with Vercel AI SDK's `createProviderRegistry()`. Registers Google (Gemini) as the sole provider. Resolves `'google:model'` strings (e.g., `'google:gemini-2.5-flash'`) to model instances. API key is read from `GEMINI_API_KEY` environment variable.
 
 ## Project Structure
 
