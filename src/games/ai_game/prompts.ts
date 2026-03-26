@@ -1,4 +1,4 @@
-import type { GameConfig } from '../core/types.js'
+import type { GameConfig } from '../../core/types.js'
 
 /**
  * System prompt instructing the LLM to act as a rules-faithful game master.

@@ -2,16 +2,16 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import type { Player } from '../core/player.js'
-import type { ActionRequest, GameConfig } from '../core/types.js'
-import { Recorder } from '../core/recorder.js'
-import { AIGameMaster } from './game-master.js'
-import { Engine } from '../core/engine.js'
-import { useHttpRecording } from '../test-utils/http-recording.js'
+import type { Player } from '../../core/player.js'
+import type { ActionRequest, GameConfig } from '../../core/types.js'
+import { Recorder } from '../../core/recorder.js'
+import { AIGame } from './ai-game.js'
+import { Engine } from '../../core/engine.js'
+import { useHttpRecording } from '../../test-utils/http-recording.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const RULES_PATH = join(__dirname, '../../rules/avalon.md')
+const RULES_PATH = join(__dirname, '../../../rules/avalon.md')
 const LOG_FILE = '/tmp/boardgame-ai-avalon-integration-test.jsonl'
 
 // Skip unless API key is available or cassettes have been recorded
@@ -116,11 +116,11 @@ afterEach(() => {
   if (existsSync(LOG_FILE)) unlinkSync(LOG_FILE)
 })
 
-describe.skipIf(SKIP)('integration: AI Game Master - Avalon', () => {
+describe.skipIf(SKIP)('integration: AI Game - Avalon', () => {
   it('plays a 5-player Avalon game to completion', async () => {
     await useHttpRecording()
     const rulesDoc = readFileSync(RULES_PATH, 'utf-8')
-    const game = new AIGameMaster(rulesDoc)
+    const game = new AIGame(rulesDoc)
     const recorder = new Recorder('avalon-integration-1', LOG_FILE)
 
     const playerIds = ['alice', 'bob', 'charlie', 'diana', 'eve']

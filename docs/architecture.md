@@ -56,13 +56,13 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 - Engine processes the first response that resolves
 - Remaining pending requests stay active
 - Game may return overlapping requests — engine skips duplicates
-- **AIGameMaster batching**: When multiple players must act simultaneously, AIGameMaster batches their responses into a single LLM call. Intermediate `handleResponse` calls return no-ops (`{ requests: [], events: [] }`). The final response (when all pending players have responded) triggers the actual LLM call with all actions.
+- **AIGame batching**: When multiple players must act simultaneously, AIGame batches their responses into a single LLM call. Intermediate `handleResponse` calls return no-ops (`{ requests: [], events: [] }`). The final response (when all pending players have responded) triggers the actual LLM call with all actions.
 
-## AI Game Master (`src/ai-game-master/`)
+## AI Game (`src/games/ai_game/`)
 
 LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript, it feeds a markdown rules document to an LLM and asks it to manage game state.
 
-- **`game-master.ts`** — `AIGameMaster` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'google:gemini-2.5-flash'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
+- **`ai-game.ts`** — `AIGame` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'google:gemini-2.5-flash'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
 - **`prompts.ts`** — System prompt and message builders for game master LLM calls.
 - **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
 
@@ -88,16 +88,17 @@ src/
 │   ├── llm-registry.ts       # Provider registry (AI SDK)
 │   └── *.test.ts             # Co-located tests
 │
-├── ai-game-master/           # LLM-powered Game implementation
-│   ├── game-master.ts        # AIGameMaster implements Game
-│   ├── prompts.ts            # Prompt builders
-│   ├── schemas.ts            # LLM response schema + JSON Schema ↔ Zod
-│   └── *.test.ts             # Co-located tests
+├── games/
+│   └── ai_game/              # LLM-powered Game implementation
+│       ├── ai-game.ts        # AIGame implements Game
+│       ├── prompts.ts        # Prompt builders
+│       ├── schemas.ts        # LLM response schema + JSON Schema ↔ Zod
+│       └── *.test.ts         # Co-located tests
 │
 ├── players/                  # Player implementations
 │   └── llm-player.ts         # LLM-backed agent
 │
-rules/                        # Markdown rules documents for AIGameMaster
+rules/                        # Markdown rules documents for AIGame
 ├── tic-tac-toe.md
 └── avalon.md
 ```

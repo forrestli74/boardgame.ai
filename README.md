@@ -6,7 +6,7 @@ Framework for LLM agents to play social deduction board games (starting with Ava
 
 - **Phase 1 complete** — core types, engine, recorder, events.
 - **Phase 2 next** — Avalon rules (deterministic, no LLMs needed)
-- `src/core/` is stable. `src/ai-game-master/` is experimental/WIP.
+- `src/core/` is stable. `src/games/ai_game/` is experimental/WIP.
 
 ## Stack
 
@@ -39,7 +39,7 @@ Framework for LLM agents to play social deduction board games (starting with Ava
 ## Source
 
 - `src/core/` — framework types, engine, recorder, events
-- `src/ai-game-master/` — LLM-powered game master (experimental/WIP)
+- `src/games/ai_game/` — LLM-powered game master (experimental/WIP)
 
 ## Conventions
 

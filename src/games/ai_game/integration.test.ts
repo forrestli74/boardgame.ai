@@ -2,16 +2,16 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import type { Player } from '../core/player.js'
-import type { ActionRequest, GameConfig } from '../core/types.js'
-import { Recorder } from '../core/recorder.js'
-import { AIGameMaster } from './game-master.js'
-import { Engine } from '../core/engine.js'
-import { useHttpRecording } from '../test-utils/http-recording.js'
+import type { Player } from '../../core/player.js'
+import type { ActionRequest, GameConfig } from '../../core/types.js'
+import { Recorder } from '../../core/recorder.js'
+import { AIGame } from './ai-game.js'
+import { Engine } from '../../core/engine.js'
+import { useHttpRecording } from '../../test-utils/http-recording.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const RULES_PATH = join(__dirname, '../../rules/tic-tac-toe.md')
+const RULES_PATH = join(__dirname, '../../../rules/tic-tac-toe.md')
 const LOG_FILE = '/tmp/boardgame-ai-gm-integration-test.jsonl'
 
 // Skip unless API key is available or cassettes have been recorded
@@ -39,11 +39,11 @@ afterEach(() => {
   if (existsSync(LOG_FILE)) unlinkSync(LOG_FILE)
 })
 
-describe.skipIf(SKIP)('integration: AI Game Master', () => {
+describe.skipIf(SKIP)('integration: AI Game', () => {
   it('plays tic-tac-toe to completion', async () => {
     await useHttpRecording()
     const rulesDoc = readFileSync(RULES_PATH, 'utf-8')
-    const game = new AIGameMaster(rulesDoc)
+    const game = new AIGame(rulesDoc)
     const recorder = new Recorder('ttt-integration-1', LOG_FILE)
 
     // X plays diagonal: (0,0), (1,1), (2,2) -- wins if O doesn't block

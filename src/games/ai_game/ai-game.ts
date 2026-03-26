@@ -1,14 +1,14 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
-import type { Game } from '../core/game.js'
-import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../core/types.js'
-import type { GameEvent } from '../core/events.js'
-import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
+import type { Game } from '../../core/game.js'
+import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
+import type { GameEvent } from '../../core/events.js'
+import { registry, DEFAULT_MODEL } from '../../core/llm-registry.js'
 import { jsonSchemaToZod, LLMGameResponseSchema, parseState, parseView, parseActionSchema, parseEventData, scoresToRecord } from './schemas.js'
 import type { LLMGameResponse } from './schemas.js'
 import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildBatchActionMessage } from './prompts.js'
 
-export class AIGameMaster implements Game {
+export class AIGame implements Game {
   readonly optionsSchema = z.object({})
 
   private state: Record<string, unknown> = {}

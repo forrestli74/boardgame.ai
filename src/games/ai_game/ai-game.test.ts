@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
-import type { GameConfig } from '../core/types.js'
+import type { GameConfig } from '../../core/types.js'
 import type { LLMGameResponse } from './schemas.js'
 
 // ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ vi.mock('ai', async () => {
 })
 
 // Import after mock setup
-const { AIGameMaster } = await import('./game-master.js')
+const { AIGame } = await import('./ai-game.js')
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,7 +146,7 @@ function makeTerminalResponse(): LLMGameResponse {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('AIGameMaster', () => {
+describe('AIGame', () => {
   beforeEach(() => {
     mockGenerateText.mockReset()
   })
@@ -154,7 +154,7 @@ describe('AIGameMaster', () => {
   describe('init()', () => {
     it('calls generateText and returns a GameResponse with action requests', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const response = await gm.init(config)
 
@@ -165,7 +165,7 @@ describe('AIGameMaster', () => {
 
     it('converts JSON Schema actionSchema to Zod', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const response = await gm.init(config)
       const schema = response.requests[0].actionSchema
@@ -179,7 +179,7 @@ describe('AIGameMaster', () => {
 
     it('formats events as GameEvent with source "game"', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const response = await gm.init(config)
 
@@ -192,7 +192,7 @@ describe('AIGameMaster', () => {
 
     it('sets isTerminal to false after init', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
 
@@ -202,7 +202,7 @@ describe('AIGameMaster', () => {
 
     it('calls generateText with correct arguments', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
 
@@ -220,7 +220,7 @@ describe('AIGameMaster', () => {
     it('calls generateText with current state and returns updated GameResponse', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       const response = await gm.handleResponse('p1', { row: 0, col: 0 })
@@ -232,7 +232,7 @@ describe('AIGameMaster', () => {
     it('updates internal state across calls', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 0 })
@@ -244,7 +244,7 @@ describe('AIGameMaster', () => {
     it('detects terminal state', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeTerminalResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 2 })
@@ -256,7 +256,7 @@ describe('AIGameMaster', () => {
   describe('getOutcome()', () => {
     it('returns null before terminal', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
 
@@ -266,7 +266,7 @@ describe('AIGameMaster', () => {
     it('returns outcome after terminal', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeTerminalResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 2 })
@@ -279,7 +279,7 @@ describe('AIGameMaster', () => {
 
   describe('optionsSchema', () => {
     it('is an empty object schema', () => {
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const result = gm.optionsSchema.safeParse({})
       expect(result.success).toBe(true)
@@ -293,7 +293,7 @@ describe('AIGameMaster', () => {
         events: [{ description: 'Score update', data: '42' }],
       }
       mockLLMResponse(response)
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const result = await gm.init(config)
 
@@ -306,7 +306,7 @@ describe('AIGameMaster', () => {
         events: [{ description: 'Null event', data: 'null' }],
       }
       mockLLMResponse(response)
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       const result = await gm.init(config)
 
@@ -317,7 +317,7 @@ describe('AIGameMaster', () => {
   describe('custom model', () => {
     it('passes the model string to generateText', async () => {
       mockLLMResponse(makeInitResponse())
-      const gm = new AIGameMaster(rulesDoc, 'google:gemini-2.0-flash')
+      const gm = new AIGame(rulesDoc, 'google:gemini-2.0-flash')
 
       await gm.init(config)
 
@@ -330,7 +330,7 @@ describe('AIGameMaster', () => {
     it('single response behaves same as before (no batching)', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       const response = await gm.handleResponse('p1', { row: 0, col: 0 })
@@ -343,7 +343,7 @@ describe('AIGameMaster', () => {
     it('intermediate responses return no-op, final triggers LLM call', async () => {
       mockLLMResponse(makeMultiPlayerInitResponse())
       mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config3Players)
       const callsAfterInit = mockGenerateText.mock.calls.length
@@ -367,7 +367,7 @@ describe('AIGameMaster', () => {
     it('uses buildBatchActionMessage for multiple responses', async () => {
       mockLLMResponse(makeMultiPlayerInitResponse())
       mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config3Players)
       await gm.handleResponse('p1', { vote: 'approve' })
@@ -381,7 +381,7 @@ describe('AIGameMaster', () => {
     it('uses buildActionMessage for single queued response', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config)
       await gm.handleResponse('p1', { row: 0, col: 0 })
@@ -394,7 +394,7 @@ describe('AIGameMaster', () => {
     it('handles null action in batch', async () => {
       mockLLMResponse(makeMultiPlayerInitResponse())
       mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config3Players)
       await gm.handleResponse('p1', { vote: 'approve' })
@@ -408,7 +408,7 @@ describe('AIGameMaster', () => {
     it('preserves order of responses in batch', async () => {
       mockLLMResponse(makeMultiPlayerInitResponse())
       mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGameMaster(rulesDoc)
+      const gm = new AIGame(rulesDoc)
 
       await gm.init(config3Players)
       await gm.handleResponse('p3', { vote: 'approve' })
