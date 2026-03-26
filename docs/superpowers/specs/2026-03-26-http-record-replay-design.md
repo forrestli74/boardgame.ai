@@ -39,15 +39,16 @@ Uses nock.back's native modes directly — no custom modes. `VCR_MODE` maps stra
 
 | `VCR_MODE` | Behavior |
 |-----------|----------|
-| `record` (default) | Replay from cassette if exists; record + save if not |
+| (unset) / `dryrun` (nock default) | Replay from cassette if exists; pass through to real API if not; does NOT save |
+| `record` | Replay from cassette if exists; record + save new cassettes |
 | `lockdown` | Replay from cassette only; fail if missing |
-| `dryrun` | Replay from cassette if exists; pass through without saving if not |
 | `wild` | Bypass all fixtures, always hit real API |
 
-To re-record a specific test: delete its cassette file, then run in `record` mode.
+To re-record a specific test: delete its cassette file, then run with `VCR_MODE=record`.
 
 npm scripts:
-- `npm test` — `record` (default)
+- `npm test` — `dryrun` (nock default)
+- `npm run test:record` — `VCR_MODE=record vitest run`
 - `npm run test:ci` — `VCR_MODE=lockdown vitest run`
 
 ### Cassette Storage
@@ -127,8 +128,10 @@ export async function useHttpRecording(): Promise<void> {
   }
   usedFixtureNames.add(fixtureKey)
 
-  // Use nock.back's native modes directly
-  nockBack.setMode(process.env.VCR_MODE || 'record')
+  // Use nock.back's native modes; default is dryrun (nock's own default)
+  if (process.env.VCR_MODE) {
+    nockBack.setMode(process.env.VCR_MODE)
+  }
 
   mkdirSync(fixtureDir, { recursive: true })
   nockBack.fixtures = fixtureDir
@@ -189,7 +192,7 @@ Nock is CommonJS; the project uses ESM. Known compatibility concern (vitest-dev/
 
 ## Verification
 
-1. **Record cassettes:** `npm test` with `GEMINI_API_KEY` set (first run, no cassettes yet)
+1. **Record cassettes:** `VCR_MODE=record npm test` with `GEMINI_API_KEY` set
 2. **Replay from cassettes:** Unset `GEMINI_API_KEY`, run `npm test` — tests should pass using cassettes
 3. **Lockdown mode:** `VCR_MODE=lockdown npm test` — should pass with cassettes, fail without
 4. **Check cassettes:** Inspect `__fixtures__/*.json` — verify no API keys present
