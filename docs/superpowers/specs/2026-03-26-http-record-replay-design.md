@@ -33,18 +33,22 @@ describe('integration: AI Game Master', () => {
 })
 ```
 
-### Three Modes via `VCR_MODE`
+### Modes via `VCR_MODE`
 
-| Mode | `VCR_MODE` | Behavior | nock.back mode |
-|------|-----------|----------|----------------|
-| **Auto** (default) | unset or `auto` | Replay from cassette if exists; call real API and save cassette if not | `record` |
-| **Refresh** | `refresh` | Delete existing cassette, always call real API, save fresh cassette | `record` (after delete) |
-| **Locked** | `locked` | Replay from cassette only; fail if cassette missing | `lockdown` |
+Uses nock.back's native modes directly — no custom modes. `VCR_MODE` maps straight to `nockBack.setMode()`.
+
+| `VCR_MODE` | Behavior |
+|-----------|----------|
+| `record` (default) | Replay from cassette if exists; record + save if not |
+| `lockdown` | Replay from cassette only; fail if missing |
+| `dryrun` | Replay from cassette if exists; pass through without saving if not |
+| `wild` | Bypass all fixtures, always hit real API |
+
+To re-record a specific test: delete its cassette file, then run in `record` mode.
 
 npm scripts:
-- `npm test` — auto mode (default)
-- `npm run test:record` — `VCR_MODE=refresh vitest run`
-- `npm run test:ci` — `VCR_MODE=locked vitest run`
+- `npm test` — `record` (default)
+- `npm run test:ci` — `VCR_MODE=lockdown vitest run`
 
 ### Cassette Storage
 
@@ -65,7 +69,7 @@ Single file: `src/test-utils/http-recording.ts` (~60 lines).
 ```typescript
 import nock from 'nock'
 import { expect, onTestFinished } from 'vitest'
-import { existsSync, unlinkSync, mkdirSync } from 'fs'
+import { mkdirSync } from 'fs'
 import path from 'path'
 
 const nockBack = nock.back
@@ -113,31 +117,18 @@ export async function useHttpRecording(): Promise<void> {
 
   const fixtureName = sanitize(currentTestName) + '.json'
   const fixtureDir = path.join(path.dirname(testPath), '__fixtures__')
-  const fixturePath = path.join(fixtureDir, fixtureName)
 
   // Enforce unique fixture names (tape-nock pattern)
-  if (usedFixtureNames.has(fixturePath)) {
+  const fixtureKey = path.join(fixtureDir, fixtureName)
+  if (usedFixtureNames.has(fixtureKey)) {
     throw new Error(
       `Duplicate fixture name: "${fixtureName}". All test names must be unique.`
     )
   }
-  usedFixtureNames.add(fixturePath)
+  usedFixtureNames.add(fixtureKey)
 
-  const mode = process.env.VCR_MODE || 'auto'
-
-  switch (mode) {
-    case 'refresh':
-      if (existsSync(fixturePath)) unlinkSync(fixturePath)
-      nockBack.setMode('record')
-      break
-    case 'locked':
-      nockBack.setMode('lockdown')
-      break
-    case 'auto':
-    default:
-      nockBack.setMode('record')
-      break
-  }
+  // Use nock.back's native modes directly
+  nockBack.setMode(process.env.VCR_MODE || 'record')
 
   mkdirSync(fixtureDir, { recursive: true })
   nockBack.fixtures = fixtureDir
@@ -198,9 +189,9 @@ Nock is CommonJS; the project uses ESM. Known compatibility concern (vitest-dev/
 
 ## Verification
 
-1. **Record cassettes:** `VCR_MODE=refresh npm test` (requires `GEMINI_API_KEY`)
+1. **Record cassettes:** `npm test` with `GEMINI_API_KEY` set (first run, no cassettes yet)
 2. **Replay from cassettes:** Unset `GEMINI_API_KEY`, run `npm test` — tests should pass using cassettes
-3. **Locked mode:** `VCR_MODE=locked npm test` — should pass with cassettes, fail without
+3. **Lockdown mode:** `VCR_MODE=lockdown npm test` — should pass with cassettes, fail without
 4. **Check cassettes:** Inspect `__fixtures__/*.json` — verify no API keys present
 5. **ESM compatibility:** Verify nock intercepts correctly in the ESM context
 
