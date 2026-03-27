@@ -32,7 +32,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [makeRequest('p1')], events: [] }
         return { scores: { p1: 1 } }
       },
@@ -49,7 +49,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [makeRequest('p1')], events: [] }
         // After first response, request again
         yield { requests: [makeRequest('p1')], events: [] }
@@ -68,7 +68,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [makeRequest('p1'), makeRequest('p1')], events: [] }
         return { scores: {} }
       },
@@ -88,7 +88,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         const { action } = yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: strictSchema }],
           events: [],
@@ -116,7 +116,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return { scores: {} }
       },
@@ -137,7 +137,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         const { action } = yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
           events: [],
@@ -162,7 +162,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return { scores: {} }
       },
@@ -185,7 +185,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
           events: [{ source: 'game' as const, gameId: 'g1', data: { type: 'init' }, timestamp: ts }],
@@ -211,7 +211,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         const { action } = yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
           events: [],
@@ -231,7 +231,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [], events: [] }
         return { scores: {} }
       },
@@ -248,7 +248,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return { scores: { p1: 1 } }
       },
@@ -269,7 +269,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return expected
       },
@@ -291,7 +291,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         // Request both players simultaneously
         yield {
           requests: [
@@ -324,7 +324,7 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      *play() {
+      async *play() {
         yield { requests: [{ playerId: 'p1', view: { step: 0 }, actionSchema: schema }], events: [] }
         yield { requests: [{ playerId: 'p1', view: { step: 1 }, actionSchema: schema }], events: [] }
         yield { requests: [{ playerId: 'p1', view: { step: 2 }, actionSchema: schema }], events: [] }

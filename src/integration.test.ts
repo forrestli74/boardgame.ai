@@ -29,7 +29,7 @@ class GuessingGame implements Game {
       source: 'game', gameId: config.gameId, data, timestamp: new Date().toISOString(),
     })
 
-    return (function* () {
+    return (async function* () {
       let pendingEvents: GameEvent[] = [gameEvent({ type: 'start', players })]
 
       for (let round = 0; round < maxRounds; round++) {

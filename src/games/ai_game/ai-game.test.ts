@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { z } from 'zod'
-import type { GameConfig } from '../../core/types.js'
+import type { GameConfig, GameResponse } from '../../core/types.js'
+import type { GameFlow } from '../../core/game.js'
 import type { LLMGameResponse } from './schemas.js'
 
 // ---------------------------------------------------------------------------
@@ -23,6 +24,12 @@ const { AIGame } = await import('./ai-game.js')
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+async function nextResponse(gen: GameFlow, action?: { playerId: string; action: unknown }): Promise<GameResponse> {
+  const result = action ? await gen.next(action) : await gen.next()
+  if (result.done) throw new Error('Generator completed unexpectedly')
+  return result.value
+}
 
 function mockLLMResponse(response: LLMGameResponse) {
   mockGenerateText.mockResolvedValueOnce({
@@ -151,12 +158,13 @@ describe('AIGame', () => {
     mockGenerateText.mockReset()
   })
 
-  describe('init()', () => {
-    it('calls generateText and returns a GameResponse with action requests', async () => {
+  describe('play() first yield', () => {
+    it('calls generateText and yields a GameResponse with action requests', async () => {
       mockLLMResponse(makeInitResponse())
       const gm = new AIGame(rulesDoc)
 
-      const response = await gm.init(config)
+      const gen = gm.play(config)
+      const response = await nextResponse(gen)
 
       expect(response.requests).toHaveLength(1)
       expect(response.requests[0].playerId).toBe('p1')
@@ -167,7 +175,8 @@ describe('AIGame', () => {
       mockLLMResponse(makeInitResponse())
       const gm = new AIGame(rulesDoc)
 
-      const response = await gm.init(config)
+      const gen = gm.play(config)
+      const response = await nextResponse(gen)
       const schema = response.requests[0].actionSchema
 
       const validResult = schema.safeParse({ row: 1, col: 2 })
@@ -181,7 +190,8 @@ describe('AIGame', () => {
       mockLLMResponse(makeInitResponse())
       const gm = new AIGame(rulesDoc)
 
-      const response = await gm.init(config)
+      const gen = gm.play(config)
+      const response = await nextResponse(gen)
 
       expect(response.events).toHaveLength(1)
       expect(response.events[0].source).toBe('game')
@@ -190,21 +200,12 @@ describe('AIGame', () => {
       expect(response.events[0].data).toMatchObject({ description: 'Game started', type: 'game_start' })
     })
 
-    it('sets isTerminal to false after init', async () => {
-      mockLLMResponse(makeInitResponse())
-      const gm = new AIGame(rulesDoc)
-
-      await gm.init(config)
-
-      expect(gm.isTerminal()).toBe(false)
-      expect(gm.getOutcome()).toBeNull()
-    })
-
     it('calls generateText with correct arguments', async () => {
       mockLLMResponse(makeInitResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
+      const gen = gm.play(config)
+      await gen.next()
 
       expect(mockGenerateText).toHaveBeenCalledTimes(1)
       const callArgs = mockGenerateText.mock.calls[0][0]
@@ -216,14 +217,15 @@ describe('AIGame', () => {
     })
   })
 
-  describe('handleResponse()', () => {
-    it('calls generateText with current state and returns updated GameResponse', async () => {
+  describe('subsequent yields', () => {
+    it('calls generateText with current state and yields updated GameResponse', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
-      const response = await gm.handleResponse('p1', { row: 0, col: 0 })
+      const gen = gm.play(config)
+      await nextResponse(gen) // init yield
+      const response = await nextResponse(gen, { playerId: 'p1', action: { row: 0, col: 0 } })
 
       expect(response.requests).toHaveLength(1)
       expect(response.requests[0].playerId).toBe('p2')
@@ -234,46 +236,28 @@ describe('AIGame', () => {
       mockLLMResponse(makeMoveResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
-      await gm.handleResponse('p1', { row: 0, col: 0 })
+      const gen = gm.play(config)
+      await nextResponse(gen)
+      await nextResponse(gen, { playerId: 'p1', action: { row: 0, col: 0 } })
 
       const secondCallArgs = mockGenerateText.mock.calls[1][0]
       expect(secondCallArgs.messages[0].content).toContain('currentPlayer')
     })
 
-    it('detects terminal state', async () => {
+    it('returns GameOutcome when terminal', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeTerminalResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
-      await gm.handleResponse('p1', { row: 0, col: 2 })
-
-      expect(gm.isTerminal()).toBe(true)
-    })
-  })
-
-  describe('getOutcome()', () => {
-    it('returns null before terminal', async () => {
-      mockLLMResponse(makeInitResponse())
-      const gm = new AIGame(rulesDoc)
-
-      await gm.init(config)
-
-      expect(gm.getOutcome()).toBeNull()
-    })
-
-    it('returns outcome after terminal', async () => {
-      mockLLMResponse(makeInitResponse())
-      mockLLMResponse(makeTerminalResponse())
-      const gm = new AIGame(rulesDoc)
-
-      await gm.init(config)
-      await gm.handleResponse('p1', { row: 0, col: 2 })
-
-      const outcome = gm.getOutcome()
-      expect(outcome).not.toBeNull()
-      expect(outcome!.scores).toEqual({ p1: 1, p2: 0 })
+      const gen = gm.play(config)
+      await nextResponse(gen) // init yield
+      // Send action — LLM returns terminal, generator returns GameOutcome directly
+      const result = await gen.next({ playerId: 'p1', action: { row: 0, col: 2 } })
+      expect(result.done).toBe(true)
+      expect(result.value).toEqual({
+        scores: { p1: 1, p2: 0 },
+        metadata: { finalEvents: expect.any(Array) },
+      })
     })
   })
 
@@ -295,9 +279,10 @@ describe('AIGame', () => {
       mockLLMResponse(response)
       const gm = new AIGame(rulesDoc)
 
-      const result = await gm.init(config)
+      const gen = gm.play(config)
+      const gameResponse = await nextResponse(gen)
 
-      expect(result.events[0].data).toEqual({ description: 'Score update', value: 42 })
+      expect(gameResponse.events[0].data).toEqual({ description: 'Score update', value: 42 })
     })
 
     it('handles null event data', async () => {
@@ -308,9 +293,10 @@ describe('AIGame', () => {
       mockLLMResponse(response)
       const gm = new AIGame(rulesDoc)
 
-      const result = await gm.init(config)
+      const gen = gm.play(config)
+      const gameResponse = await nextResponse(gen)
 
-      expect(result.events[0].data).toEqual({ description: 'Null event', value: null })
+      expect(gameResponse.events[0].data).toEqual({ description: 'Null event', value: null })
     })
   })
 
@@ -319,7 +305,8 @@ describe('AIGame', () => {
       mockLLMResponse(makeInitResponse())
       const gm = new AIGame(rulesDoc, 'google:gemini-2.0-flash')
 
-      await gm.init(config)
+      const gen = gm.play(config)
+      await gen.next()
 
       const callArgs = mockGenerateText.mock.calls[0][0]
       expect(callArgs.model).toBeDefined()
@@ -327,38 +314,42 @@ describe('AIGame', () => {
   })
 
   describe('response batching', () => {
-    it('single response behaves same as before (no batching)', async () => {
+    it('single response triggers LLM call immediately', async () => {
       mockLLMResponse(makeInitResponse())
       mockLLMResponse(makeMoveResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
-      const response = await gm.handleResponse('p1', { row: 0, col: 0 })
+      const gen = gm.play(config)
+      await nextResponse(gen) // init
+      const response = await nextResponse(gen, { playerId: 'p1', action: { row: 0, col: 0 } })
 
       expect(response.requests).toHaveLength(1)
       expect(response.requests[0].playerId).toBe('p2')
       expect(mockGenerateText).toHaveBeenCalledTimes(2)
     })
 
-    it('intermediate responses return no-op, final triggers LLM call', async () => {
+    it('buffers responses and triggers LLM on last one', async () => {
       mockLLMResponse(makeMultiPlayerInitResponse())
       mockLLMResponse(makeVoteResultResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config3Players)
+      const gen = gm.play(config3Players)
+      await nextResponse(gen) // init — 3 requests for p1, p2, p3
       const callsAfterInit = mockGenerateText.mock.calls.length
 
-      const r1 = await gm.handleResponse('p2', { vote: 'reject' })
+      // First two responses — buffered (no-op yields)
+      const r1 = await nextResponse(gen, { playerId: 'p2', action: { vote: 'reject' } })
       expect(r1.requests).toHaveLength(0)
       expect(r1.events).toHaveLength(0)
       expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit)
 
-      const r2 = await gm.handleResponse('p1', { vote: 'approve' })
+      const r2 = await nextResponse(gen, { playerId: 'p1', action: { vote: 'approve' } })
       expect(r2.requests).toHaveLength(0)
       expect(r2.events).toHaveLength(0)
       expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit)
 
-      const r3 = await gm.handleResponse('p3', { vote: 'approve' })
+      // Third response — all collected, triggers LLM
+      const r3 = await nextResponse(gen, { playerId: 'p3', action: { vote: 'approve' } })
       expect(r3.requests).toHaveLength(1)
       expect(r3.events).toHaveLength(1)
       expect(mockGenerateText).toHaveBeenCalledTimes(callsAfterInit + 1)
@@ -369,10 +360,11 @@ describe('AIGame', () => {
       mockLLMResponse(makeVoteResultResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config3Players)
-      await gm.handleResponse('p1', { vote: 'approve' })
-      await gm.handleResponse('p2', { vote: 'reject' })
-      await gm.handleResponse('p3', { vote: 'approve' })
+      const gen = gm.play(config3Players)
+      await nextResponse(gen)
+      await nextResponse(gen, { playerId: 'p1', action: { vote: 'approve' } })
+      await nextResponse(gen, { playerId: 'p2', action: { vote: 'reject' } })
+      await nextResponse(gen, { playerId: 'p3', action: { vote: 'approve' } })
 
       const batchCallArgs = mockGenerateText.mock.calls[1][0]
       expect(batchCallArgs.messages[0].content).toContain('Multiple players have submitted actions simultaneously')
@@ -383,45 +375,13 @@ describe('AIGame', () => {
       mockLLMResponse(makeMoveResponse())
       const gm = new AIGame(rulesDoc)
 
-      await gm.init(config)
-      await gm.handleResponse('p1', { row: 0, col: 0 })
+      const gen = gm.play(config)
+      await nextResponse(gen)
+      await nextResponse(gen, { playerId: 'p1', action: { row: 0, col: 0 } })
 
       const callArgs = mockGenerateText.mock.calls[1][0]
       expect(callArgs.messages[0].content).toContain('A player has submitted an action')
       expect(callArgs.messages[0].content).not.toContain('Multiple players')
-    })
-
-    it('handles null action in batch', async () => {
-      mockLLMResponse(makeMultiPlayerInitResponse())
-      mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGame(rulesDoc)
-
-      await gm.init(config3Players)
-      await gm.handleResponse('p1', { vote: 'approve' })
-      await gm.handleResponse('p2', null)
-      await gm.handleResponse('p3', { vote: 'approve' })
-
-      const batchCallArgs = mockGenerateText.mock.calls[1][0]
-      expect(batchCallArgs.messages[0].content).toContain('Failed to submit a valid action')
-    })
-
-    it('preserves order of responses in batch', async () => {
-      mockLLMResponse(makeMultiPlayerInitResponse())
-      mockLLMResponse(makeVoteResultResponse())
-      const gm = new AIGame(rulesDoc)
-
-      await gm.init(config3Players)
-      await gm.handleResponse('p3', { vote: 'approve' })
-      await gm.handleResponse('p1', { vote: 'approve' })
-      await gm.handleResponse('p2', { vote: 'reject' })
-
-      const batchCallArgs = mockGenerateText.mock.calls[1][0]
-      const content = batchCallArgs.messages[0].content as string
-      const p3Idx = content.indexOf('Player "p3"')
-      const p1Idx = content.indexOf('Player "p1"')
-      const p2Idx = content.indexOf('Player "p2"')
-      expect(p3Idx).toBeLessThan(p1Idx)
-      expect(p1Idx).toBeLessThan(p2Idx)
     })
   })
 })

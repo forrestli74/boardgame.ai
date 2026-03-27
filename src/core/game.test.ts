@@ -9,7 +9,7 @@ class MockGame implements Game {
   readonly optionsSchema = z.object({})
 
   play(config: GameConfig): GameFlow {
-    return (function* () {
+    return (async function* () {
       const { action } = yield {
         requests: [{ playerId: config.players[0].id, view: {}, actionSchema: z.unknown() }],
         events: [{ source: 'game' as const, gameId: config.gameId, data: { type: 'started' }, timestamp: ts }],
@@ -20,17 +20,17 @@ class MockGame implements Game {
 }
 
 describe('Game interface', () => {
-  it('can be implemented as a generator', () => {
+  it('can be implemented as an async generator', () => {
     const game = new MockGame()
     expect(game).toBeDefined()
     expect(game.play).toBeDefined()
   })
 
-  it('first yield returns GameResponse with requests and events', () => {
+  it('first yield returns GameResponse with requests and events', async () => {
     const game = new MockGame()
     const config: GameConfig = { gameId: 'g1', seed: 1, players: [{ id: 'p1', name: 'Alice' }] }
     const gen = game.play(config)
-    const result = gen.next()
+    const result = await gen.next()
     expect(result.done).toBe(false)
     const response = result.value as GameResponse
     expect(response.requests).toHaveLength(1)
@@ -38,12 +38,12 @@ describe('Game interface', () => {
     expect(response.requests[0].playerId).toBe('p1')
   })
 
-  it('generator return produces GameOutcome', () => {
+  it('generator return produces GameOutcome', async () => {
     const game = new MockGame()
     const config: GameConfig = { gameId: 'g1', seed: 1, players: [{ id: 'p1', name: 'Alice' }] }
     const gen = game.play(config)
-    gen.next() // first yield
-    const result = gen.next({ playerId: 'p1', action: {} })
+    await gen.next() // first yield
+    const result = await gen.next({ playerId: 'p1', action: {} })
     expect(result.done).toBe(true)
     expect(result.value).toEqual({ scores: { p1: 1 } })
   })

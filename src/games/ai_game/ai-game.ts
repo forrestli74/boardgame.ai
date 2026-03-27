@@ -1,7 +1,7 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
-import type { Game } from '../../core/game.js'
-import type { GameResponse, GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
+import type { Game, GameFlow } from '../../core/game.js'
+import type { GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
 import type { GameEvent } from '../../core/events.js'
 import { registry, DEFAULT_MODEL } from '../../core/llm-registry.js'
 import { jsonSchemaToZod, LLMGameResponseSchema, parseState, parseView, parseActionSchema, parseEventData, scoresToRecord } from './schemas.js'
@@ -11,55 +11,73 @@ import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildBatchActi
 export class AIGame implements Game {
   readonly optionsSchema = z.object({})
 
-  private state: Record<string, unknown> = {}
-  private terminal = false
-  private outcome: GameOutcome | null = null
-  private gameId = ''
-  private pendingPlayerIds = new Set<string>()
-  private responseQueue: Array<{ playerId: string; action: unknown }> = []
-
   constructor(
     private readonly rulesDoc: string,
     private readonly model: string = DEFAULT_MODEL,
   ) {}
 
-  async init(config: GameConfig): Promise<GameResponse> {
-    this.gameId = config.gameId
+  play(config: GameConfig): GameFlow {
+    const self = this
+    return (async function* () {
+      const gameId = config.gameId
+      const systemPrompt = buildSystemPrompt()
 
-    const systemPrompt = buildSystemPrompt()
-    const userMessage = buildInitMessage(this.rulesDoc, config)
+      // Init: call LLM to set up the game
+      const initMessage = buildInitMessage(self.rulesDoc, config)
+      const initRaw = await self.callLLM(systemPrompt, initMessage)
+      const initParsed = LLMGameResponseSchema.parse(initRaw)
+      let state = parseState(initParsed.state)
+      let { requests, events } = self.processLLMResponse(initParsed, gameId)
 
-    const raw = await this.callLLM(systemPrompt, userMessage)
-    const parsed = LLMGameResponseSchema.parse(raw)
+      if (initParsed.isTerminal) {
+        return initParsed.outcome
+          ? { scores: scoresToRecord(initParsed.outcome.scores), metadata: { finalEvents: events } }
+          : { scores: {}, metadata: { finalEvents: events } }
+      }
 
-    return this.processLLMResponse(parsed)
-  }
+      // Track pending players for batching
+      let pendingPlayerIds = new Set(requests.map(r => r.playerId))
+      let responseQueue: Array<{ playerId: string; action: unknown }> = []
 
-  async handleResponse(playerId: string, action: unknown): Promise<GameResponse> {
-    this.responseQueue.push({ playerId, action })
-    this.pendingPlayerIds.delete(playerId)
+      // First yield sends initial requests + events
+      const firstAction = yield { requests, events }
+      responseQueue.push(firstAction)
+      pendingPlayerIds.delete(firstAction.playerId)
 
-    if (this.pendingPlayerIds.size > 0) {
-      return { requests: [], events: [] }
-    }
+      // Main loop
+      while (true) {
+        // Buffer responses until all pending players have responded
+        while (pendingPlayerIds.size > 0) {
+          const action = yield { requests: [], events: [] }
+          responseQueue.push(action)
+          pendingPlayerIds.delete(action.playerId)
+        }
 
-    const systemPrompt = buildSystemPrompt()
-    const userMessage = this.responseQueue.length === 1
-      ? buildActionMessage(this.rulesDoc, this.state, this.responseQueue[0].playerId, this.responseQueue[0].action)
-      : buildBatchActionMessage(this.rulesDoc, this.state, this.responseQueue)
+        // All responses collected — call LLM
+        const userMessage = responseQueue.length === 1
+          ? buildActionMessage(self.rulesDoc, state, responseQueue[0].playerId, responseQueue[0].action)
+          : buildBatchActionMessage(self.rulesDoc, state, responseQueue)
 
-    const raw = await this.callLLM(systemPrompt, userMessage)
-    const parsed = LLMGameResponseSchema.parse(raw)
+        const raw = await self.callLLM(systemPrompt, userMessage)
+        const parsed = LLMGameResponseSchema.parse(raw)
+        state = parseState(parsed.state)
+        const response = self.processLLMResponse(parsed, gameId)
 
-    return this.processLLMResponse(parsed)
-  }
+        if (parsed.isTerminal) {
+          return parsed.outcome
+            ? { scores: scoresToRecord(parsed.outcome.scores), metadata: { finalEvents: response.events } }
+            : { scores: {}, metadata: { finalEvents: response.events } }
+        }
 
-  isTerminal(): boolean {
-    return this.terminal
-  }
+        // Reset for next round
+        pendingPlayerIds = new Set(response.requests.map(r => r.playerId))
+        responseQueue = []
 
-  getOutcome(): GameOutcome | null {
-    return this.outcome
+        const nextAction = yield { requests: response.requests, events: response.events }
+        responseQueue.push(nextAction)
+        pendingPlayerIds.delete(nextAction.playerId)
+      }
+    })()
   }
 
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
@@ -88,28 +106,19 @@ export class AIGame implements Game {
     throw new Error('LLM returned no tool call after 3 attempts')
   }
 
-  private processLLMResponse(llmResponse: LLMGameResponse): GameResponse {
-    this.state = parseState(llmResponse.state)
-    this.terminal = llmResponse.isTerminal
-    this.outcome = llmResponse.outcome
-      ? { scores: scoresToRecord(llmResponse.outcome.scores) }
-      : null
-
+  private processLLMResponse(llmResponse: LLMGameResponse, gameId: string): { requests: ActionRequest[]; events: GameEvent[] } {
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
       view: parseView(req.view),
       actionSchema: jsonSchemaToZod(parseActionSchema(req.actionSchema)),
     }))
 
-    this.pendingPlayerIds = new Set(requests.map(r => r.playerId))
-    this.responseQueue = []
-
     const timestamp = new Date().toISOString()
     const events: GameEvent[] = llmResponse.events.map((evt) => {
       const data = parseEventData(evt.data)
       return {
         source: 'game' as const,
-        gameId: this.gameId,
+        gameId,
         data: { description: evt.description, ...((data && typeof data === 'object') ? data as Record<string, unknown> : { value: data }) },
         timestamp,
       }

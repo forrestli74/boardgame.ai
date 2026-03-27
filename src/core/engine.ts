@@ -18,7 +18,7 @@ export class Engine {
     const gen = game.play(config)
     const pending = new Map<string, Promise<PendingResponse>>()
 
-    let result = gen.next()
+    let result = await gen.next()
     while (!result.done) {
       const { requests, events } = result.value
       for (const event of events) {
@@ -51,7 +51,7 @@ export class Engine {
         timestamp: new Date().toISOString(),
       })
 
-      result = gen.next({ playerId: response.playerId, action: parsed })
+      result = await gen.next({ playerId: response.playerId, action: parsed })
     }
 
     return result.value

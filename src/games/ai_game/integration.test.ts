@@ -89,9 +89,6 @@ describe.skipIf(SKIP)('integration: AI Game', () => {
     // The LLM interprets the rules, so we expect X wins but allow for edge cases
     expect(outcome!.scores['player-x']).toBeGreaterThanOrEqual(outcome!.scores['player-o'])
 
-    // The game master should have marked the game as terminal
-    expect(game.isTerminal()).toBe(true)
-
     // JSONL log file should have recorded events
     expect(existsSync(LOG_FILE)).toBe(true)
     const lines = readFileSync(LOG_FILE, 'utf-8').trim().split('\n')
