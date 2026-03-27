@@ -21,7 +21,8 @@ Output format:
 - The "state" and event "data" fields must be JSON-encoded strings (use JSON.stringify).
 - Each request has a "playerId" and a "prompt" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.
 - Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. "Choose a team of 2 players from: alice, bob, charlie, diana, eve").
-- The "scores" field in outcome is an array of {playerId, score} objects, not a map.`
+- The "scores" field in outcome is an array of {playerId, score} objects, not a map.
+- Scoring convention: winners receive score 1, losers receive score 0.`
 }
 
 /**

@@ -110,7 +110,9 @@ describe('integration: full game loop', () => {
       ],
     }
 
-    const outcome = await new Engine(recorder).run(game, players, config)
+    const engine = new Engine()
+    engine.onEvent((e) => recorder.record(e))
+    const outcome = await engine.run(game, players, config)
     recorder.flush()
 
     // Outcome should exist with scores

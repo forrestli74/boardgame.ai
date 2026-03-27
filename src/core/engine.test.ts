@@ -4,7 +4,6 @@ import { Engine } from './engine.js'
 import type { Game, GameFlow } from './game.js'
 import type { Player } from './player.js'
 import type { GameConfig, ActionRequest, GameResponse, GameOutcome } from './types.js'
-import type { Recorder } from './recorder.js'
 
 const ts = '2026-01-01T00:00:00.000Z'
 
@@ -15,10 +14,6 @@ function makeConfig(override?: Partial<GameConfig>): GameConfig {
     players: [{ id: 'p1', name: 'Alice' }],
     ...override,
   }
-}
-
-function makeRecorder(): Recorder {
-  return { record: vi.fn(), flush: vi.fn() } as unknown as Recorder
 }
 
 function makeRequest(playerId: string): ActionRequest {
@@ -38,7 +33,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(actSpy).toHaveBeenCalledTimes(1)
   })
@@ -57,7 +52,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(actSpy).toHaveBeenCalledTimes(2)
   })
@@ -74,7 +69,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(actSpy).toHaveBeenCalledTimes(1)
   })
@@ -98,7 +93,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
   })
 
@@ -122,7 +117,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(attempts).toBeGreaterThanOrEqual(3)
   })
@@ -147,13 +142,13 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(receivedAction).toBeNull()
   })
 
-  it('records player event via Recorder for each response', async () => {
-    const recorder = makeRecorder()
+  it('emits player event for each response', async () => {
+    const onEvent = vi.fn()
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ move: 'go' }),
@@ -168,15 +163,16 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(recorder)
+    const engine = new Engine()
+    engine.onEvent(onEvent)
     await engine.run(game, new Map([['p1', player]]), makeConfig())
-    expect(recorder.record).toHaveBeenCalledWith(
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'player', playerId: 'p1' })
     )
   })
 
-  it('records game events from yielded events via Recorder', async () => {
-    const recorder = makeRecorder()
+  it('emits game events from yielded events', async () => {
+    const onEvent = vi.fn()
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ move: 'go' }),
@@ -194,9 +190,10 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(recorder)
+    const engine = new Engine()
+    engine.onEvent(onEvent)
     await engine.run(game, new Map([['p1', player]]), makeConfig())
-    expect(recorder.record).toHaveBeenCalledWith(
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'game' })
     )
   })
@@ -221,7 +218,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(deliveredAction).toEqual({ move: 'right' })
   })
@@ -237,7 +234,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(outcome).toBeNull()
   })
@@ -254,7 +251,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(outcome).toEqual({ scores: { p1: 1 } })
   })
@@ -275,7 +272,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(outcome).toEqual(expected)
   })
@@ -307,7 +304,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     const config: GameConfig = {
       gameId: 'g1', seed: 1,
       players: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
@@ -332,7 +329,7 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine(makeRecorder())
+    const engine = new Engine()
     const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(actSpy).toHaveBeenCalledTimes(3)
     expect(outcome?.scores.p1).toBe(3)

@@ -13,7 +13,7 @@
      │         action (unknown)       │                 │
      │◀──────────────────────────────┤                 │
      │                                                  │
-     │            GameEvent                             │
+     │            GameEvent (via onEvent listener)       │
      ├─────────────────────────────────────────────────▶│
 ```
 
@@ -25,7 +25,7 @@ Mediator. Owns the game loop.
 - Drives the generator with `.next()` — first call starts the game, subsequent calls deliver player responses
 - **Diffs requests** — each yield returns ALL current requests; engine only sends new ones (keyed by `playerId`)
 - **Validates** responses via `actionSchema.safeParse()` with retry (3 attempts), passes `null` on exhaustion
-- Records all events via Recorder
+- Emits events via `onEvent()` listeners (e.g., Recorder for JSONL logging)
 - Stops when `pending.size === 0` (returns null) or generator completes (returns `GameOutcome`)
 
 ## Game (`src/core/game.ts`)

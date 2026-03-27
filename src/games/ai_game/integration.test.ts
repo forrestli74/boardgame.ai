@@ -69,7 +69,8 @@ describe.skipIf(SKIP)('integration: AI Game', () => {
       ],
     }
 
-    const engine = new Engine(recorder)
+    const engine = new Engine()
+    engine.onEvent((e) => recorder.record(e))
     const outcome = await engine.run(game, players, config)
     recorder.flush()
 

@@ -1,7 +1,7 @@
 import type { Game, PlayerAction } from './game.js'
 import type { Player } from './player.js'
 import type { ActionRequest, GameConfig, GameOutcome } from './types.js'
-import type { Recorder } from './recorder.js'
+import type { GameEvent } from './events.js'
 
 interface PendingResponse {
   playerId: string
@@ -11,8 +11,15 @@ interface PendingResponse {
 
 export class Engine {
   private maxRetries = 3
+  private listeners: ((event: GameEvent) => void)[] = []
 
-  constructor(private recorder: Recorder) {}
+  onEvent(listener: (event: GameEvent) => void): void {
+    this.listeners.push(listener)
+  }
+
+  private emit(event: GameEvent): void {
+    for (const fn of this.listeners) fn(event)
+  }
 
   async run(game: Game, players: Map<string, Player>, config: GameConfig): Promise<GameOutcome | null> {
     const gen = game.play(config)
@@ -22,7 +29,7 @@ export class Engine {
     while (!result.done) {
       const { requests, events } = result.value
       for (const event of events) {
-        this.recorder.record(event)
+        this.emit(event)
       }
 
       for (const req of requests) {
@@ -43,7 +50,7 @@ export class Engine {
         response.action, response.request, players.get(response.playerId)!
       )
 
-      this.recorder.record({
+      this.emit({
         source: 'player',
         gameId: config.gameId,
         playerId: response.playerId,

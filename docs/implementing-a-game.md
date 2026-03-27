@@ -146,6 +146,8 @@ const recorder = new Recorder('game-1', '/tmp/coinflip.jsonl')
 const players = new Map([['p1', somePlayer]])
 const config = { gameId: 'game-1', seed: 42, players: [{ id: 'p1', name: 'Alice' }] }
 
-const outcome = await new Engine(recorder).run(game, players, config)
+const engine = new Engine()
+engine.onEvent((e) => recorder.record(e))
+const outcome = await engine.run(game, players, config)
 recorder.flush()
 ```
