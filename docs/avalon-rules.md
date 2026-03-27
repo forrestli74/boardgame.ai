@@ -24,7 +24,17 @@ Source: [Official Rulebook PDF](https://avalon.fun/pdfs/rules.pdf) by Don Eskrid
 | 4th Quest  | 3 | 3 | 4 | 5 | 5 | 5  |
 | 5th Quest  | 3 | 4 | 4 | 5 | 5 | 5  |
 
-**4th Quest special rule:** In games of 7+ players, the 4th Quest requires **at least 2 Fail cards** to be a failed Quest (instead of the usual 1).
+### Fails Required to Fail a Quest
+
+| Players    | 5 | 6 | 7 | 8 | 9 | 10 |
+|------------|---|---|---|---|---|----|
+| 1st Quest  | 1 | 1 | 1 | 1 | 1 | 1  |
+| 2nd Quest  | 1 | 1 | 1 | 1 | 1 | 1  |
+| 3rd Quest  | 1 | 1 | 1 | 1 | 1 | 1  |
+| 4th Quest  | 1 | 1 | **2** | **2** | **2** | **2**  |
+| 5th Quest  | 1 | 1 | 1 | 1 | 1 | 1  |
+
+**4th Quest special rule:** In games of 7+ players, the 4th Quest (and only the 4th Quest) requires **at least 2 Fail cards** to be a failed Quest (instead of the usual 1).
 
 ## Characters
 
@@ -148,6 +158,35 @@ The game ends immediately when:
 - The examined player receives the Lady of the Lake token.
 - A player who has held the Lady cannot be examined by it again.
 - The Lady is used only **3 times** in the game.
+
+## Recommended Role Setups by Player Count
+
+The official rulebook only requires Merlin + Assassin; all other roles are optional. The table below reflects community consensus from BGG, Reddit, and tournament play. See [avalon-role-setup-rationale.md](avalon-role-setup-rationale.md) for detailed reasoning.
+
+**The experienced setup is used by default.** Beginner setup (Merlin + Assassin only) is available as an option.
+
+### Beginner (any count)
+
+Merlin + Assassin only, rest are generic Loyal Servants / Minions of Mordred.
+
+### Experienced (default)
+
+| Players | Good | Evil |
+|---------|------|------|
+| 5 | Merlin, Percival, Servant | Morgana, Assassin |
+| 6 | Merlin, Percival, Servant x2 | Morgana, Assassin |
+| 7 | Merlin, Percival, Servant x2 | Mordred, Morgana, Assassin |
+| 8 | Merlin, Percival, Servant x3 | Mordred, Morgana, Assassin |
+| 9 | Merlin, Percival, Servant x4 | Mordred, Morgana, Assassin |
+| 10 | Merlin, Percival, Servant x4 | Mordred, Morgana, Oberon, Assassin |
+
+### Balance Notes
+
+- **Percival + Morgana** are always added together — Percival without Morgana is too strong for Good.
+- **Mordred** is added at 7+ — at lower counts, hiding one Evil from Merlin leaves Good with too little info (only 2 Evil total).
+- **Oberon** is added at 10 (sometimes 7) — needs enough Evil teammates that losing one from coordination isn't crippling.
+- **Lady of the Lake** is a popular addition at 7+ for extra investigation power.
+- At **5 players**, the rulebook specifically says: add either Mordred or Morgana when using Percival.
 
 ## Key Rules for Implementation
 
