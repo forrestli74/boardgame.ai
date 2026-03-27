@@ -110,6 +110,73 @@ export const AvalonOptionsSchema = z.object({
   useLady: z.boolean().optional(),
 })
 
+// --- Game State ---
+
+export interface AvalonState {
+  players: AvalonPlayer[]
+  phase: Phase
+  questNumber: number
+  questResults: ('success' | 'fail' | null)[]
+  leaderIndex: number
+  proposalRejections: number
+  proposedTeam?: string[]
+}
+
+// --- View Building ---
+
+export function getKnownPlayers(
+  player: AvalonPlayer,
+  players: AvalonPlayer[],
+): { id: string; appearance: string }[] {
+  const others = players.filter(p => p.id !== player.id)
+
+  switch (player.role) {
+    case 'merlin':
+      // Sees evil except mordred
+      return others
+        .filter(p => p.team === 'evil' && p.role !== 'mordred')
+        .map(p => ({ id: p.id, appearance: 'evil' }))
+
+    case 'percival':
+      // Sees merlin and morgana (can't distinguish)
+      return others
+        .filter(p => p.role === 'merlin' || p.role === 'morgana')
+        .map(p => ({ id: p.id, appearance: 'merlin-or-morgana' }))
+
+    case 'oberon':
+      // Sees nothing
+      return []
+
+    case 'loyal-servant':
+      return []
+
+    default:
+      // Evil roles (mordred, morgana, assassin): see other evil except oberon
+      if (player.team === 'evil') {
+        return others
+          .filter(p => p.team === 'evil' && p.role !== 'oberon')
+          .map(p => ({ id: p.id, appearance: 'evil' }))
+      }
+      return []
+  }
+}
+
+export function buildView(player: AvalonPlayer, state: AvalonState): PlayerView {
+  return {
+    yourId: player.id,
+    yourRole: player.role,
+    yourTeam: player.team,
+    knownPlayers: getKnownPlayers(player, state.players),
+    phase: state.phase,
+    questNumber: state.questNumber,
+    questResults: [...state.questResults],
+    leader: state.players[state.leaderIndex].id,
+    proposalRejections: state.proposalRejections,
+    proposedTeam: state.proposedTeam ? [...state.proposedTeam] : undefined,
+    players: state.players.map(p => p.id),
+  }
+}
+
 // --- Seeded PRNG and Role Assignment ---
 
 function mulberry32(seed: number): () => number {

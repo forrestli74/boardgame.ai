@@ -10,6 +10,9 @@ import {
   AssassinationTargetSchema,
   AvalonOptionsSchema,
   assignRoles,
+  buildView,
+  type AvalonPlayer,
+  type AvalonState,
 } from './types.js'
 
 describe('TEAM_COUNTS', () => {
@@ -278,5 +281,172 @@ describe('assignRoles', () => {
 
   it('throws for unsupported player count', () => {
     expect(() => assignRoles(['p1', 'p2', 'p3'], 42)).toThrow('Unsupported player count: 3')
+  })
+})
+
+describe('buildView', () => {
+  // 7-player game: merlin, percival, 2x loyal-servant, mordred, morgana, assassin
+  const players: AvalonPlayer[] = [
+    { id: 'merlin', role: 'merlin', team: 'good' },
+    { id: 'percival', role: 'percival', team: 'good' },
+    { id: 'servant1', role: 'loyal-servant', team: 'good' },
+    { id: 'servant2', role: 'loyal-servant', team: 'good' },
+    { id: 'mordred', role: 'mordred', team: 'evil' },
+    { id: 'morgana', role: 'morgana', team: 'evil' },
+    { id: 'assassin', role: 'assassin', team: 'evil' },
+  ]
+
+  const state: AvalonState = {
+    players,
+    phase: 'team-proposal',
+    questNumber: 2,
+    questResults: ['success', null, null, null, null],
+    leaderIndex: 1,
+    proposalRejections: 0,
+  }
+
+  it('merlin sees evil players except mordred', () => {
+    const view = buildView(players[0], state) // merlin
+    const knownIds = view.knownPlayers.map(p => p.id)
+    expect(knownIds).toContain('morgana')
+    expect(knownIds).toContain('assassin')
+    expect(knownIds).not.toContain('mordred')
+    expect(knownIds).not.toContain('percival')
+    expect(knownIds).not.toContain('servant1')
+    for (const known of view.knownPlayers) {
+      expect(known.appearance).toBe('evil')
+    }
+  })
+
+  it('percival sees merlin and morgana as merlin-or-morgana', () => {
+    const view = buildView(players[1], state) // percival
+    const knownIds = view.knownPlayers.map(p => p.id)
+    expect(knownIds).toContain('merlin')
+    expect(knownIds).toContain('morgana')
+    expect(knownIds).not.toContain('mordred')
+    expect(knownIds).not.toContain('assassin')
+    for (const known of view.knownPlayers) {
+      expect(known.appearance).toBe('merlin-or-morgana')
+    }
+  })
+
+  it('loyal-servant sees nothing', () => {
+    const view = buildView(players[2], state) // servant1
+    expect(view.knownPlayers).toHaveLength(0)
+  })
+
+  it('evil (assassin) sees other evil except oberon', () => {
+    const view = buildView(players[6], state) // assassin
+    const knownIds = view.knownPlayers.map(p => p.id)
+    expect(knownIds).toContain('mordred')
+    expect(knownIds).toContain('morgana')
+    expect(knownIds).not.toContain('assassin') // not themselves
+    expect(knownIds).not.toContain('merlin')
+    for (const known of view.knownPlayers) {
+      expect(known.appearance).toBe('evil')
+    }
+  })
+
+  it('evil (mordred) sees other evil except oberon', () => {
+    const view = buildView(players[4], state) // mordred
+    const knownIds = view.knownPlayers.map(p => p.id)
+    expect(knownIds).toContain('morgana')
+    expect(knownIds).toContain('assassin')
+    expect(knownIds).not.toContain('mordred') // not themselves
+    expect(knownIds).not.toContain('merlin')
+  })
+
+  it('oberon sees nothing', () => {
+    const oberonPlayers: AvalonPlayer[] = [
+      { id: 'merlin', role: 'merlin', team: 'good' },
+      { id: 'percival', role: 'percival', team: 'good' },
+      { id: 'servant1', role: 'loyal-servant', team: 'good' },
+      { id: 'servant2', role: 'loyal-servant', team: 'good' },
+      { id: 'mordred', role: 'mordred', team: 'evil' },
+      { id: 'morgana', role: 'morgana', team: 'evil' },
+      { id: 'oberon', role: 'oberon', team: 'evil' },
+      { id: 'assassin', role: 'assassin', team: 'evil' },
+      { id: 'servant3', role: 'loyal-servant', team: 'good' },
+      { id: 'servant4', role: 'loyal-servant', team: 'good' },
+    ]
+    const oberonState: AvalonState = {
+      players: oberonPlayers,
+      phase: 'team-proposal',
+      questNumber: 1,
+      questResults: [null, null, null, null, null],
+      leaderIndex: 0,
+      proposalRejections: 0,
+    }
+    const view = buildView(oberonPlayers[6], oberonState) // oberon
+    expect(view.knownPlayers).toHaveLength(0)
+  })
+
+  it('evil does not see oberon', () => {
+    const oberonPlayers: AvalonPlayer[] = [
+      { id: 'merlin', role: 'merlin', team: 'good' },
+      { id: 'percival', role: 'percival', team: 'good' },
+      { id: 'servant1', role: 'loyal-servant', team: 'good' },
+      { id: 'servant2', role: 'loyal-servant', team: 'good' },
+      { id: 'mordred', role: 'mordred', team: 'evil' },
+      { id: 'morgana', role: 'morgana', team: 'evil' },
+      { id: 'oberon', role: 'oberon', team: 'evil' },
+      { id: 'assassin', role: 'assassin', team: 'evil' },
+      { id: 'servant3', role: 'loyal-servant', team: 'good' },
+      { id: 'servant4', role: 'loyal-servant', team: 'good' },
+    ]
+    const oberonState: AvalonState = {
+      players: oberonPlayers,
+      phase: 'team-proposal',
+      questNumber: 1,
+      questResults: [null, null, null, null, null],
+      leaderIndex: 0,
+      proposalRejections: 0,
+    }
+    const view = buildView(oberonPlayers[7], oberonState) // assassin
+    const knownIds = view.knownPlayers.map(p => p.id)
+    expect(knownIds).not.toContain('oberon')
+  })
+
+  it('public state fields are correct', () => {
+    const view = buildView(players[2], state)
+    expect(view.yourId).toBe('servant1')
+    expect(view.yourRole).toBe('loyal-servant')
+    expect(view.yourTeam).toBe('good')
+    expect(view.phase).toBe('team-proposal')
+    expect(view.questNumber).toBe(2)
+    expect(view.questResults).toEqual(['success', null, null, null, null])
+    expect(view.leader).toBe('percival')
+    expect(view.proposalRejections).toBe(0)
+    expect(view.players).toEqual(players.map(p => p.id))
+  })
+
+  it('questResults is a copy, not a reference', () => {
+    const view = buildView(players[2], state)
+    view.questResults[0] = 'fail'
+    expect(state.questResults[0]).toBe('success')
+  })
+
+  it('proposedTeam is included when set', () => {
+    const stateWithTeam: AvalonState = {
+      ...state,
+      proposedTeam: ['merlin', 'percival'],
+    }
+    const view = buildView(players[2], stateWithTeam)
+    expect(view.proposedTeam).toEqual(['merlin', 'percival'])
+  })
+
+  it('proposedTeam is undefined when not set', () => {
+    const view = buildView(players[2], state)
+    expect(view.proposedTeam).toBeUndefined()
+  })
+
+  it('proposedTeam copy is independent of state', () => {
+    const stateWithTeam: AvalonState = {
+      ...state,
+      proposedTeam: ['merlin', 'percival'],
+    }
+    const view = buildView(players[2], stateWithTeam)
+    view.proposedTeam!.push('servant1')
+    expect(stateWithTeam.proposedTeam).toHaveLength(2)
   })
 })
