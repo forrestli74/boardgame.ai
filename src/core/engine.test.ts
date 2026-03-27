@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { z } from 'zod'
 import { Engine } from './engine.js'
-import type { Game } from './game.js'
+import type { Game, GameFlow } from './game.js'
 import type { Player } from './player.js'
 import type { GameConfig, ActionRequest, GameResponse, GameOutcome } from './types.js'
 import type { Recorder } from './recorder.js'
@@ -26,16 +26,16 @@ function makeRequest(playerId: string): ActionRequest {
 }
 
 describe('Engine', () => {
-  it('sends initial requests from game.init() to correct players', async () => {
+  it('sends initial requests from first yield to correct players', async () => {
     const actSpy = vi.fn().mockResolvedValue({ move: 'go' })
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [makeRequest('p1')], events: [] }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: { p1: 1 } }),
+      *play() {
+        yield { requests: [makeRequest('p1')], events: [] }
+        return { scores: { p1: 1 } }
+      },
     }
 
     const engine = new Engine(makeRecorder())
@@ -46,17 +46,15 @@ describe('Engine', () => {
   it('diffs game requests against pending — only sends new requests', async () => {
     const actSpy = vi.fn().mockResolvedValue({ move: 'go' })
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
-    let callCount = 0
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [makeRequest('p1')], events: [] }),
-      handleResponse: () => {
-        callCount++
-        return { requests: callCount < 2 ? [makeRequest('p1')] : [], events: [] }
+      *play() {
+        yield { requests: [makeRequest('p1')], events: [] }
+        // After first response, request again
+        yield { requests: [makeRequest('p1')], events: [] }
+        return { scores: { p1: 1 } }
       },
-      isTerminal: () => callCount >= 2,
-      getOutcome: () => ({ scores: { p1: 1 } }),
     }
 
     const engine = new Engine(makeRecorder())
@@ -70,13 +68,10 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({
-        requests: [makeRequest('p1'), makeRequest('p1')],
-        events: [],
-      }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
+      *play() {
+        yield { requests: [makeRequest('p1'), makeRequest('p1')], events: [] }
+        return { scores: {} }
+      },
     }
 
     const engine = new Engine(makeRecorder())
@@ -93,16 +88,14 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({
-        requests: [{ playerId: 'p1', view: {}, actionSchema: strictSchema }],
-        events: [],
-      }),
-      handleResponse: (_pid, action) => {
+      *play() {
+        const { action } = yield {
+          requests: [{ playerId: 'p1', view: {}, actionSchema: strictSchema }],
+          events: [],
+        }
         expect(action).toEqual({ move: 'go' })
-        return { requests: [], events: [] }
+        return { scores: {} }
       },
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
     }
 
     const engine = new Engine(makeRecorder())
@@ -123,10 +116,10 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
+      *play() {
+        yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
+        return { scores: {} }
+      },
     }
 
     const engine = new Engine(makeRecorder())
@@ -134,7 +127,7 @@ describe('Engine', () => {
     expect(attempts).toBeGreaterThanOrEqual(3)
   })
 
-  it('passes null to game.handleResponse on max retries exceeded', async () => {
+  it('passes null action to generator on max retries exceeded', async () => {
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ invalid: true }),
@@ -144,13 +137,14 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: (_pid, action) => {
+      *play() {
+        const { action } = yield {
+          requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
+          events: [],
+        }
         receivedAction = action
-        return { requests: [], events: [] }
+        return { scores: {} }
       },
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
     }
 
     const engine = new Engine(makeRecorder())
@@ -168,10 +162,10 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
+      *play() {
+        yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
+        return { scores: {} }
+      },
     }
 
     const engine = new Engine(recorder)
@@ -181,7 +175,7 @@ describe('Engine', () => {
     )
   })
 
-  it('records game events from gameResponse.events via Recorder', async () => {
+  it('records game events from yielded events via Recorder', async () => {
     const recorder = makeRecorder()
     const player: Player = {
       id: 'p1', name: 'Alice',
@@ -191,16 +185,13 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({
-        requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
-        events: [{ source: 'game', gameId: 'g1', data: { type: 'init' }, timestamp: ts }],
-      }),
-      handleResponse: () => ({
-        requests: [],
-        events: [{ source: 'game', gameId: 'g1', data: { type: 'end' }, timestamp: ts }],
-      }),
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
+      *play() {
+        yield {
+          requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
+          events: [{ source: 'game' as const, gameId: 'g1', data: { type: 'init' }, timestamp: ts }],
+        }
+        return { scores: {} }
+      },
     }
 
     const engine = new Engine(recorder)
@@ -210,7 +201,7 @@ describe('Engine', () => {
     )
   })
 
-  it('delivers parsed response to game.handleResponse()', async () => {
+  it('delivers parsed response to generator via .next()', async () => {
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ move: 'right' }),
@@ -220,13 +211,14 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: (_pid, action) => {
+      *play() {
+        const { action } = yield {
+          requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
+          events: [],
+        }
         deliveredAction = action
-        return { requests: [], events: [] }
+        return { scores: {} }
       },
-      isTerminal: () => true,
-      getOutcome: () => ({ scores: {} }),
     }
 
     const engine = new Engine(makeRecorder())
@@ -234,15 +226,15 @@ describe('Engine', () => {
     expect(deliveredAction).toEqual({ move: 'right' })
   })
 
-  it('stops when pending is empty', async () => {
+  it('stops when pending is empty (returns null)', async () => {
     const player: Player = { id: 'p1', name: 'Alice', act: vi.fn().mockResolvedValue({}) }
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [], events: [] }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => false,
-      getOutcome: () => null,
+      *play() {
+        yield { requests: [], events: [] }
+        return { scores: {} }
+      },
     }
 
     const engine = new Engine(makeRecorder())
@@ -250,29 +242,24 @@ describe('Engine', () => {
     expect(outcome).toBeNull()
   })
 
-  it('stops when game.isTerminal() returns true after handleResponse', async () => {
-    let handleCount = 0
+  it('stops when generator completes (returns GameOutcome)', async () => {
     const player: Player = { id: 'p1', name: 'Alice', act: vi.fn().mockResolvedValue({ move: 'go' }) }
     const schema = z.object({ move: z.string() })
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: () => {
-        handleCount++
-        return { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
+      *play() {
+        yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
+        return { scores: { p1: 1 } }
       },
-      isTerminal: () => handleCount >= 1,
-      getOutcome: () => ({ scores: { p1: 1 } }),
     }
 
     const engine = new Engine(makeRecorder())
     const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
     expect(outcome).toEqual({ scores: { p1: 1 } })
-    expect(handleCount).toBe(1)
   })
 
-  it('returns game.getOutcome()', async () => {
+  it('returns GameOutcome with correct scores', async () => {
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ move: 'go' }),
@@ -282,10 +269,10 @@ describe('Engine', () => {
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }),
-      handleResponse: () => ({ requests: [], events: [] }),
-      isTerminal: () => true,
-      getOutcome: () => expected,
+      *play() {
+        yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
+        return expected
+      },
     }
 
     const engine = new Engine(makeRecorder())
@@ -301,23 +288,23 @@ describe('Engine', () => {
       ['p1', { id: 'p1', name: 'Alice', act: p1Act }],
       ['p2', { id: 'p2', name: 'Bob', act: p2Act }],
     ])
-    let handleCount = 0
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({
-        requests: [
-          { playerId: 'p1', view: {}, actionSchema: schema },
-          { playerId: 'p2', view: {}, actionSchema: schema },
-        ],
-        events: [],
-      }),
-      handleResponse: () => {
-        handleCount++
-        return { requests: [], events: [] }
+      *play() {
+        // Request both players simultaneously
+        yield {
+          requests: [
+            { playerId: 'p1', view: {}, actionSchema: schema },
+            { playerId: 'p2', view: {}, actionSchema: schema },
+          ],
+          events: [],
+        }
+        // First response comes in — buffer it
+        yield { requests: [], events: [] }
+        // Second response — both done
+        return { scores: { p1: 1, p2: 1 } }
       },
-      isTerminal: () => handleCount >= 2,
-      getOutcome: () => ({ scores: { p1: 1, p2: 1 } }),
     }
 
     const engine = new Engine(makeRecorder())
@@ -334,20 +321,15 @@ describe('Engine', () => {
     const actSpy = vi.fn().mockResolvedValue({ move: 'go' })
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
     const schema = z.object({ move: z.string() })
-    let step = 0
 
     const game: Game = {
       optionsSchema: z.object({}),
-      init: () => ({ requests: [{ playerId: 'p1', view: { step: 0 }, actionSchema: schema }], events: [] }),
-      handleResponse: () => {
-        step++
-        if (step < 3) {
-          return { requests: [{ playerId: 'p1', view: { step }, actionSchema: schema }], events: [] }
-        }
-        return { requests: [], events: [] }
+      *play() {
+        yield { requests: [{ playerId: 'p1', view: { step: 0 }, actionSchema: schema }], events: [] }
+        yield { requests: [{ playerId: 'p1', view: { step: 1 }, actionSchema: schema }], events: [] }
+        yield { requests: [{ playerId: 'p1', view: { step: 2 }, actionSchema: schema }], events: [] }
+        return { scores: { p1: 3 } }
       },
-      isTerminal: () => step >= 3,
-      getOutcome: () => ({ scores: { p1: step } }),
     }
 
     const engine = new Engine(makeRecorder())

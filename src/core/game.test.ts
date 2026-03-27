@@ -8,12 +8,14 @@ const ts = '2026-01-01T00:00:00.000Z'
 class MockGame implements Game {
   readonly optionsSchema = z.object({})
 
-  *play(config: GameConfig): GameFlow {
-    const { action } = yield {
-      requests: [{ playerId: config.players[0].id, view: {}, actionSchema: z.unknown() }],
-      events: [{ source: 'game' as const, gameId: config.gameId, data: { type: 'started' }, timestamp: ts }],
-    }
-    return { scores: { [config.players[0].id]: 1 } }
+  play(config: GameConfig): GameFlow {
+    return (function* () {
+      const { action } = yield {
+        requests: [{ playerId: config.players[0].id, view: {}, actionSchema: z.unknown() }],
+        events: [{ source: 'game' as const, gameId: config.gameId, data: { type: 'started' }, timestamp: ts }],
+      }
+      return { scores: { [config.players[0].id]: 1 } }
+    })()
   }
 }
 
