@@ -1,67 +1,49 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import type { Game } from './game.js'
+import type { Game, GameFlow } from './game.js'
 import type { GameResponse, GameConfig, GameOutcome } from './types.js'
 
 const ts = '2026-01-01T00:00:00.000Z'
 
 class MockGame implements Game {
   readonly optionsSchema = z.object({})
-  private done = false
 
-  init(config: GameConfig): GameResponse {
-    return {
+  *play(config: GameConfig): GameFlow {
+    const { action } = yield {
       requests: [{ playerId: config.players[0].id, view: {}, actionSchema: z.unknown() }],
-      events: [{ source: 'game', gameId: config.gameId, data: { type: 'started' }, timestamp: ts }],
+      events: [{ source: 'game' as const, gameId: config.gameId, data: { type: 'started' }, timestamp: ts }],
     }
-  }
-
-  handleResponse(_playerId: string, _action: unknown): GameResponse {
-    this.done = true
-    return { requests: [], events: [] }
-  }
-
-  isTerminal(): boolean {
-    return this.done
-  }
-
-  getOutcome(): GameOutcome | null {
-    if (!this.done) return null
-    return { scores: { p1: 1 } }
+    return { scores: { [config.players[0].id]: 1 } }
   }
 }
 
 describe('Game interface', () => {
-  it('can be implemented with internal state', () => {
+  it('can be implemented as a generator', () => {
     const game = new MockGame()
     expect(game).toBeDefined()
+    expect(game.play).toBeDefined()
   })
 
-  it('init returns GameResponse with requests and events', () => {
+  it('first yield returns GameResponse with requests and events', () => {
     const game = new MockGame()
     const config: GameConfig = { gameId: 'g1', seed: 1, players: [{ id: 'p1', name: 'Alice' }] }
-    const response = game.init(config)
+    const gen = game.play(config)
+    const result = gen.next()
+    expect(result.done).toBe(false)
+    const response = result.value as GameResponse
     expect(response.requests).toHaveLength(1)
     expect(response.events).toHaveLength(1)
     expect(response.requests[0].playerId).toBe('p1')
   })
 
-  it('handleResponse returns GameResponse', () => {
+  it('generator return produces GameOutcome', () => {
     const game = new MockGame()
     const config: GameConfig = { gameId: 'g1', seed: 1, players: [{ id: 'p1', name: 'Alice' }] }
-    game.init(config)
-    const response = game.handleResponse('p1', { vote: 'yes' })
-    expect(response).toHaveProperty('requests')
-    expect(response).toHaveProperty('events')
-  })
-
-  it('holds state internally — not in method signatures', () => {
-    const game = new MockGame()
-    expect(game.isTerminal()).toBe(false)
-    const config: GameConfig = { gameId: 'g1', seed: 1, players: [{ id: 'p1', name: 'Alice' }] }
-    game.init(config)
-    game.handleResponse('p1', {})
-    expect(game.isTerminal()).toBe(true)
+    const gen = game.play(config)
+    gen.next() // first yield
+    const result = gen.next({ playerId: 'p1', action: {} })
+    expect(result.done).toBe(true)
+    expect(result.value).toEqual({ scores: { p1: 1 } })
   })
 
   it('has optionsSchema property', () => {
