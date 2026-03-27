@@ -5,65 +5,59 @@ Build a class implementing `Game`. The framework handles player communication, v
 ## Interface
 
 ```typescript
+import type { ZodSchema } from 'zod'
+import type { GameResponse, GameConfig, GameOutcome } from './core/types.js'
+
+type PlayerAction = { playerId: string; action: unknown }
+type GameFlow = Generator<GameResponse, GameOutcome, PlayerAction>
+
 interface Game {
   readonly optionsSchema: ZodSchema
-  init(config: GameConfig): GameResponse
-  handleResponse(playerId: string, action: unknown): GameResponse
-  isTerminal(): boolean
-  getOutcome(): GameOutcome | null
+  play(config: GameConfig): GameFlow
 }
 ```
+
+The `play()` method returns a generator:
+- **`yield`** sends a `GameResponse` (requests + events) to the engine
+- **`.next(playerAction)`** receives one player's validated response
+- **`return`** produces the final `GameOutcome` and ends the game
 
 ## Minimal Example: Coin Flip
 
 ```typescript
 import { z } from 'zod'
-import type { Game } from './core/game.js'
-import type { GameConfig, GameResponse, GameOutcome } from './core/types.js'
+import type { Game, GameFlow } from './core/game.js'
+import type { GameConfig } from './core/types.js'
 import type { GameEvent } from './core/events.js'
 
 const CallSchema = z.enum(['heads', 'tails'])
 
 class CoinFlip implements Game {
   readonly optionsSchema = z.object({})
-  private gameId = ''
-  private playerId = ''
-  private result: 'heads' | 'tails' = 'heads'
-  private done = false
 
-  init(config: GameConfig): GameResponse {
-    this.gameId = config.gameId
-    this.playerId = config.players[0].id
-    this.result = Math.random() > 0.5 ? 'heads' : 'tails'
-    return {
-      requests: [{
-        playerId: this.playerId,
-        view: { message: 'Call it: heads or tails' },
-        actionSchema: CallSchema,
-      }],
-      events: [this.event({ type: 'flip', result: this.result })],
-    }
+  play(config: GameConfig): GameFlow {
+    const playerId = config.players[0].id
+    const gameId = config.gameId
+    const result = Math.random() > 0.5 ? 'heads' : 'tails'
+
+    return (function* () {
+      const { action } = yield {
+        requests: [{
+          playerId,
+          view: { message: 'Call it: heads or tails' },
+          actionSchema: CallSchema,
+        }],
+        events: [event(gameId, { type: 'flip', result })],
+      }
+
+      const call = (action ?? result) as 'heads' | 'tails'
+      return { scores: { [playerId]: call === result ? 1 : 0 } }
+    })()
   }
+}
 
-  handleResponse(playerId: string, action: unknown): GameResponse {
-    const call = action as 'heads' | 'tails'
-    this.done = true
-    return {
-      requests: [],
-      events: [this.event({ type: 'result', call, won: call === this.result })],
-    }
-  }
-
-  isTerminal() { return this.done }
-
-  getOutcome(): GameOutcome | null {
-    if (!this.done) return null
-    return { scores: { [this.playerId]: this.done ? 1 : 0 } }
-  }
-
-  private event(data: unknown): GameEvent {
-    return { source: 'game', gameId: this.gameId, data, timestamp: new Date().toISOString() }
-  }
+function event(gameId: string, data: unknown): GameEvent {
+  return { source: 'game', gameId, data, timestamp: new Date().toISOString() }
 }
 ```
 
@@ -71,57 +65,74 @@ class CoinFlip implements Game {
 
 - [ ] **State is internal** — never expose full state through `view`
 - [ ] **`view` is per-player** — only show what that player should see
-- [ ] **Return ALL current requests** from `init()` and `handleResponse()` — engine diffs
+- [ ] **Yield ALL current requests** — engine diffs against pending
 - [ ] **Handle `null` actions** — engine sends null when validation retries exhausted; apply a default
 - [ ] **`actionSchema` is a Zod schema** — describes what the player can do
 - [ ] **Events are self-describing** — use `data.type` to distinguish (e.g., `round-result`, `role-assigned`)
-- [ ] **`isTerminal()` is idempotent** — engine may call it multiple times
+- [ ] **Generator returns `GameOutcome`** — `{ scores: Record<string, number> }`
+- [ ] **Don't yield with empty requests after last player acts** — engine returns null when `pending.size === 0`
 
 ## Patterns
 
 ### Parallel: Collecting All Responses
 
-All players act simultaneously. Buffer responses, resolve when all are in:
+All players act simultaneously. Buffer responses with a `while` loop, resolve when all are in:
 
 ```typescript
-private guesses: Record<string, number> = {}
-
-handleResponse(playerId: string, action: unknown): GameResponse {
-  this.guesses[playerId] = action as number
-  if (Object.keys(this.guesses).length < this.playerCount) {
-    return { requests: [], events: [] }
+*collectGuesses(players: string[], schema: ZodSchema) {
+  const guesses: Record<string, number> = {}
+  const first = yield {
+    requests: players.map(id => ({ playerId: id, view: {}, actionSchema: schema })),
+    events: [],
   }
-  // All in — resolve round...
+  guesses[first.playerId] = first.action as number
+  while (Object.keys(guesses).length < players.length) {
+    const { playerId, action } = yield { requests: [], events: [] }
+    guesses[playerId] = action as number
+  }
+  return guesses
 }
+```
+
+Use `yield*` to delegate to sub-generators:
+
+```typescript
+const guesses = yield* this.collectGuesses(playerIds, GuessSchema)
 ```
 
 ### Sequential: Turn-Based
 
-Return one request at a time. Engine only has one pending:
+Yield one request at a time:
 
 ```typescript
-handleResponse(playerId: string, action: unknown): GameResponse {
-  // process action...
-  return {
-    requests: [{ playerId: this.getNextPlayer(), view: ..., actionSchema: ... }],
-    events: [...],
+*play(config: GameConfig) {
+  for (const player of config.players) {
+    const { action } = yield {
+      requests: [{ playerId: player.id, view: { turn: player.id }, actionSchema: MoveSchema }],
+      events: [],
+    }
+    // process action...
   }
+  return { scores: { ... } }
 }
 ```
 
 ### Mixed Phases
 
-Switch between parallel and sequential by varying requests:
+Alternate between sequential and parallel by varying what you yield:
 
 ```typescript
-// Proposal: one player
-requests: [{ playerId: leader, ... }]
+// Proposal: one player (sequential)
+const { action: team } = yield {
+  requests: [{ playerId: leader, view: ..., actionSchema: ProposalSchema }],
+  events: [],
+}
 
-// Voting: all players
-requests: players.map(id => ({ playerId: id, ... }))
+// Voting: all players (parallel — use collection pattern)
+const votes = yield* this.collectVotes(playerIds)
 
-// Quest: team members only
-requests: team.map(id => ({ playerId: id, ... }))
+// Quest: team members only (parallel subset)
+const results = yield* this.collectQuestCards(team)
 ```
 
 ## Running Your Game

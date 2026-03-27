@@ -5,42 +5,39 @@
 ```
 Engine.run(game, players, config)
 │
-├─ 1. game.init(config)
-│     → GameResponse { requests, events }
-│     → Record events
+├─ 1. gen = game.play(config)
+│     result = gen.next()          // first yield
 │
-├─ 2. LOOP:
-│  ├─ 2a. Diff requests against pending map, send new ones
-│  ├─ 2b. Promise.race(pending) — wait for first response
-│  ├─ 2c. Validate: actionSchema.safeParse → retry (3x) → null
-│  ├─ 2d. Record player event
-│  ├─ 2e. game.handleResponse(playerId, action) → record game events
-│  ├─ 2f. game.isTerminal() → break if true
+├─ 2. LOOP (while !result.done):
+│  ├─ 2a. Record events from result.value
+│  ├─ 2b. Diff requests against pending map, send new ones to players
+│  ├─ 2c. Promise.race(pending) — wait for first response
+│  ├─ 2d. Validate: actionSchema.safeParse → retry (3x) → null
+│  ├─ 2e. Record player event
+│  ├─ 2f. result = gen.next({ playerId, action })
 │  └─ 2g. Back to 2a
 │
-└─ 3. Return game.getOutcome()
+└─ 3. result.done === true → return result.value (GameOutcome)
 ```
 
 ## Example: 2-Player Guessing Game
-
-From `src/integration.test.ts`:
 
 ```
 Config: alice + bob, 3 rounds, targets = [7, 3, 9]
 
 Round 1:
-  init() → requests for alice & bob (view: {round:1})
-  alice guesses 7  → handleResponse("alice", 7) → waiting for bob
-  bob guesses 4    → handleResponse("bob", 4)   → round resolves
+  gen.next() → first yield: requests for alice & bob (view: {round:1})
+  alice guesses 7  → gen.next({playerId:"alice", action:7}) → no-op yield (waiting for bob)
+  bob guesses 4    → gen.next({playerId:"bob", action:4})   → round resolves
     event: round-result {target:7, winner:"alice"}
 
 Round 2:
-  alice guesses 5  → waiting
+  alice guesses 5  → no-op yield
   bob guesses 3    → round resolves, winner:"bob"
 
 Round 3:
-  alice guesses 8  → waiting
-  bob guesses 10   → game terminal, winner:"alice"
+  alice guesses 8  → no-op yield
+  bob guesses 10   → generator returns (done=true)
 
 Outcome: { scores: {alice: 2, bob: 1} }
 ```

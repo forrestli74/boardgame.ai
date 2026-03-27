@@ -21,24 +21,24 @@
 
 Mediator. Owns the game loop.
 
-- Calls `game.init(config)` to start
-- Sends `ActionRequest` to players, collects responses
-- **Diffs requests** — game returns ALL current requests; engine only sends new ones (keyed by `playerId`)
+- Calls `game.play(config)` to get a generator
+- Drives the generator with `.next()` — first call starts the game, subsequent calls deliver player responses
+- **Diffs requests** — each yield returns ALL current requests; engine only sends new ones (keyed by `playerId`)
 - **Validates** responses via `actionSchema.safeParse()` with retry (3 attempts), passes `null` on exhaustion
 - Records all events via Recorder
-- Stops when `pending.size === 0` or `game.isTerminal()`
+- Stops when `pending.size === 0` (returns null) or generator completes (returns `GameOutcome`)
 
 ## Game (`src/core/game.ts`)
 
-State machine. Holds all game state internally.
+Generator-based state machine. The `play()` method is a generator that yields `GameResponse` objects and returns a `GameOutcome` when the game ends.
 
-| Method | Purpose |
+| Export | Purpose |
 |---|---|
-| `init(config)` | Setup, return initial requests + events |
-| `handleResponse(playerId, action)` | Process action, return new requests + events |
-| `isTerminal()` | Is the game over? |
-| `getOutcome()` | Final scores (null if not terminal) |
-| `optionsSchema` | Zod schema for game-specific config |
+| `Game` | Interface — `optionsSchema` + `play(config): GameFlow` |
+| `GameFlow` | `Generator<GameResponse, GameOutcome, PlayerAction>` |
+| `PlayerAction` | `{ playerId: string; action: unknown }` — passed to generator via `.next()` |
+
+Each `yield` sends requests + events to the engine. Each `.next(playerAction)` delivers one player's validated response. Generator completion signals the game is terminal; the return value is the outcome.
 
 ## Player (`src/core/player.ts`)
 
@@ -56,7 +56,7 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 - Engine processes the first response that resolves
 - Remaining pending requests stay active
 - Game may return overlapping requests — engine skips duplicates
-- **AIGame batching**: When multiple players must act simultaneously, AIGame batches their responses into a single LLM call. Intermediate `handleResponse` calls return no-ops (`{ requests: [], events: [] }`). The final response (when all pending players have responded) triggers the actual LLM call with all actions.
+- **Parallel collection**: When multiple players act simultaneously, the generator buffers responses via a `while` loop, yielding `{ requests: [], events: [] }` (no-ops) until all responses are collected. The engine continues dispatching pending responses via `Promise.race`.
 
 ## AI Game (`src/games/ai_game/`)
 
