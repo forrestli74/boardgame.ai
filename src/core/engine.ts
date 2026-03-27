@@ -1,4 +1,4 @@
-import type { Game } from './game.js'
+import type { Game, PlayerAction } from './game.js'
 import type { Player } from './player.js'
 import type { ActionRequest, GameConfig, GameOutcome } from './types.js'
 import type { Recorder } from './recorder.js'
@@ -15,15 +15,16 @@ export class Engine {
   constructor(private recorder: Recorder) {}
 
   async run(game: Game, players: Map<string, Player>, config: GameConfig): Promise<GameOutcome | null> {
+    const gen = game.play(config)
     const pending = new Map<string, Promise<PendingResponse>>()
 
-    const initial = await game.init(config)
-    for (const event of initial.events) {
-      this.recorder.record(event)
-    }
-    let requests = initial.requests
+    let result = gen.next()
+    while (!result.done) {
+      const { requests, events } = result.value
+      for (const event of events) {
+        this.recorder.record(event)
+      }
 
-    while (true) {
       for (const req of requests) {
         if (!pending.has(req.playerId)) {
           const player = players.get(req.playerId)!
@@ -33,7 +34,7 @@ export class Engine {
         }
       }
 
-      if (pending.size === 0) break
+      if (pending.size === 0) return null
 
       const response = await Promise.race(pending.values())
       pending.delete(response.playerId)
@@ -50,16 +51,10 @@ export class Engine {
         timestamp: new Date().toISOString(),
       })
 
-      const gameResponse = await game.handleResponse(response.playerId, parsed)
-      for (const event of gameResponse.events) {
-        this.recorder.record(event)
-      }
-      requests = gameResponse.requests
-
-      if (game.isTerminal()) break
+      result = gen.next({ playerId: response.playerId, action: parsed })
     }
 
-    return game.getOutcome()
+    return result.value
   }
 
   private async validateWithRetry(
