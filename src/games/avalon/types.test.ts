@@ -9,6 +9,7 @@ import {
   QuestVoteSchema,
   AssassinationTargetSchema,
   AvalonOptionsSchema,
+  assignRoles,
 } from './types.js'
 
 describe('TEAM_COUNTS', () => {
@@ -220,5 +221,62 @@ describe('AvalonOptionsSchema', () => {
   it('rejects invalid useLady type', () => {
     const result = AvalonOptionsSchema.safeParse({ useLady: 'yes' })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('assignRoles', () => {
+  it('returns correct count for 5 players', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const players = assignRoles(ids, 42)
+    expect(players).toHaveLength(5)
+  })
+
+  it('each player has an id, role, and team', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const players = assignRoles(ids, 42)
+    for (const p of players) {
+      expect(p.id).toBeTruthy()
+      expect(p.role).toBeTruthy()
+      expect(['good', 'evil']).toContain(p.team)
+    }
+  })
+
+  it('7 players include mordred', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']
+    const players = assignRoles(ids, 42)
+    expect(players.some(p => p.role === 'mordred')).toBe(true)
+  })
+
+  it('10 players include oberon', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10']
+    const players = assignRoles(ids, 42)
+    expect(players.some(p => p.role === 'oberon')).toBe(true)
+  })
+
+  it('is deterministic: same seed produces same result', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const a = assignRoles(ids, 99)
+    const b = assignRoles(ids, 99)
+    expect(a).toEqual(b)
+  })
+
+  it('different seeds produce different results', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const a = assignRoles(ids, 1)
+    const b = assignRoles(ids, 2)
+    // Very unlikely to be identical with different seeds
+    expect(a.map(p => p.role)).not.toEqual(b.map(p => p.role))
+  })
+
+  it('every player team matches ROLE_TEAM', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']
+    const players = assignRoles(ids, 42)
+    for (const p of players) {
+      expect(p.team).toBe(ROLE_TEAM[p.role])
+    }
+  })
+
+  it('throws for unsupported player count', () => {
+    expect(() => assignRoles(['p1', 'p2', 'p3'], 42)).toThrow('Unsupported player count: 3')
   })
 })
