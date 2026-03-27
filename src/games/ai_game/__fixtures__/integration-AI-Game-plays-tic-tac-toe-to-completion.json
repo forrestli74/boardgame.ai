@@ -1,0 +1,878 @@
+[
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "Initialize a new game.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Game Configuration\n\nGame ID: ttt-integration-1\nSeed: 42\nPlayers:\n  - id: \"player-x\", name: \"Player X\"\n  - id: \"player-o\", name: \"Player O\"\n\n\n## Instructions\n\nSet up the initial game state according to the rules. Use the seed for any randomness (shuffling, role assignment, etc.). Return the initial state and prompts for the first player(s) who must act."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013cd565b93a2c8127eef5f41f832b361cf0822a8f3a672555051e4e23ab151dc1128100a1426fabf2fda6d4f77cf6cc49e735e8e0f0879af2fb332f3c70386756c009dd001c82d3adfb03f5b0a86fdb83dafbc142217a2967127b5c40ce4e8a7ecf3efc79bf756c42ba18dc214ce401cbf537ee14390b82dbde3b7ff7f25a0406efe57ee16590a0bb7f3f8511ae47ef11b2b2dc7addae83ec6f2fb985e75daa382abef1f878e9582dc395cd5ff84651c3f623f9fdf1fb17f476b89878e5de6791bc93a06b59b5f0d1e3ad9edfdcbe5d0b90a2469e5ced212a22b137f7ce58b4e71f3ff51fee52b3d74be3ffd02c8fd206e61e76176c5f915cb02b5c9e9fc46fee917daf75fcd7672f754bac57f8a6896a749762d928e88b0b0c0eab4cc3154e610fb6cfcf1f5000ff006f4ff06f3015ecdca208fbe61c601be43fc1bf68a1e7c45bac5f9ea9a6d2b387f0ee9cac24081016cbe5d2db1d43aba36c2ce210ab04f797afe84b53701fb64a7f127ecb3fbd5fffa88b535d2325e73d6b26eef4f7f7cfda7a4dcd37a45e31ed47f9f8fb050dd3c0921b8de220fc485fb1ba136e7c8fdbfa9e86b866e35fde3adc655dff858da57e2ead0797afa08d07b709ede9fb98382b4f403b40d7d08da2abb1d7d968d848935e88eab028d84e94668b6bd41a6e5dc99beb0ca72b2f491668a252c9db908d9ca4174baa12951e2c5bddd97d9331ee29c829c8c5fa25981c6deb0ac2750139dc83fb3d669c87a9b61e86c11db174b4dcaa66a8583aee54441a1b23aa3f4cc54995abd58d65d9e4a1975aa6ae1543c79c378d6403ddabacb0be712ca311b2d257cbabae4d99eb3e8749df1ebca05092b046bb48b23d7d8e7a57a1e0a7c237487517b93f1b8474899da4d2b8e0ee55e2d9841c4c380e41551662f7c6319be1bcc8e636fb15c5c02e02d758b3cc97b66901c63c14a370c4b58665ccb3a6aa2b0b7197bcd91d96db91eefb97818527336e7bcf36e67e2226d2f1a73d90ca723c260f4b05e5915a870cfe1cfe7786e8f9293cccf2f643fd88ba519e43c29e27d8d9fce594014145c579cb79f14c024ca8d399a34f3fa4297291474a169160d971b784641d49dcceb6183d2f4b49a5c98583bb1609047aa3624ab686b409bef93c76c920bb83f0242dde494c4b27b692ef517a7452049297dae8e68a83888a865dab3759d446763dacc27bb2a5a35335b6a22704ad74a97ca4566e4f8d3296dbb8c08ac861b576ebc484cad1978fa283eaf2da31c1943924b2e82b16d4e3149e6e664ab9ae229d61a7300140baf80190bc63a617b1bf518d1b475896750840357558e1ec4075d8ed0ba85ee1c4373c9957b629ccd3654a272095c4f6d8d11f86e3add373340c050cfc34a8ebbbbe974d78d06c7c5716eed6266a5f4021ce7b641659c88625575bbce5e87a2ae15a7e949e6ec821d18c198ecd1236299471ad4e6a740534e921e7034efd791af6d7c0a8e669c41fa1eb90f7b968d97841c976c6cd06772b58d9546aecb9a61a59daf48d239dd6dcef8c8ea555d3893e4d462659253699292d54d824773d75c17abd578ec8f340d6767c3d4189979919003d9ce189358ed889e474da901816a2ad1843c2557c96846ca5957635ca36c98a894064a31e497a3b120f6c9fd6c3d13168b2e52f9c843e3722230db934c25fb725b692017156d8a72df027d7ddd67f366ec206e2b2a4413cbf546cdfb26425c7f6ae5b55d95842fecbd7d2093634bb1e15eaed5640cc752cc2fa47938b184754673cc2c465390f47743c69ca8320aa513a313a4590575885c5029c65c0a5522bdcc8e7eb82d46c53c3b168b22e62b44f5f163d0cc0aed4c170bda7179b2b7140235e8b21a130f0c31359784e7822db2358e6a1b8729e96d01e662eacfd8a3a4af8c9d78c910a2281f3ac256499ab01836c170582f9adad986742648f66e7652d77a9705e709c3ec341ed5ac91d0239353760415daaba8c916297fe6e39dac921ce72dbba13c1f80b79df167577c332adaf914df3a60923a6e7c177f6d991d2f8461116c5c503c6f095b75b57e9d5d9d103aeee5d6bfdfcbcb6e5100ff6657bedac57c17ba793b661cecbeda6176bbdb7d2eda49f8700fee1656a7bc6aca2e022f8bd6f3d2f0b224a869e4c2dbd868397d92183f3b7eb384be97a0862f022845207ecf1bf5efda6f6c174ceb398cdf6e306f56d716241087a8be1e4c650df5cd146f3d7c08ed8ee5c31bc8efc3e76398e4c30be8cf79d0dcbcb8af656e3bbfc32ffdafd4172f06457073d9b92fbbcf8bc27e33e4815d454b7b713ea1621daf243d54a2cec3d3c3df3fe6e1d9a30b0000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:32 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=2823",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    },
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "A player has submitted an action.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Current Game State\n\n{\n  \"board\": [\n    [\n      null,\n      null,\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ]\n  ],\n  \"currentPlayer\": \"player-x\",\n  \"moveCount\": 0,\n  \"playerMarks\": {\n    \"player-x\": \"X\",\n    \"player-o\": \"O\"\n  }\n}\n\n## Player Action\n\nPlayer: \"player-x\"\nResponse: row 0, col 0\n\n## Instructions\n\n1. Interpret the player's response in the context of what was asked.\n2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.\n3. If valid, apply the action: update the game state, emit events describing what happened.\n4. Check for terminal conditions (win/loss/draw).\n5. If the game is over, set isTerminal to true and provide the outcome with scores.\n6. Otherwise, determine which player(s) must act next and return their prompts."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013ad5857afa358b67eaf5fe17b5eba473edd9860c02ddd078289261a30a6cfa845ce3918dcaaff3ef8b8e2546974af3416f2866fadbdf64a3bacfdf787cde6c577ab200ddc21ec5ffed8fcb9229bcddfefff0f5a5d0d6135ac84cfd00a366e377ce57dfefefee67d6589c6ca1fd2baa2dca2f8aef3277ae596e18abfc46bfb57e9f643d8fdd5857d53577df8f2faefdc6e17f73f91b252fa61d5fb21e8efb717af76bbe0eda1d79f6f2ff6dbcbeba61a8be2f9ffcfd7cd9f5fbffe03b6826f2ffed875abd56ae12e61f790f8f6d2bcbfff563fc4bebd94f51452f5580d0f22f8fa852eb95dde3fb0bfbff4989ffded67c7af621ea0f2f6f2f1e30fe6ae6675613b86fd0f4efeb9b3bfc6e55d381f3cfcf179a09f487ff27675d93ce2fac20fbff49ba51ebbcd3076d5ebe673cfffd95c1f60b99ab449fba7b6bfbf55d4d3379b776ffff156fdf9566d363f73f83bfea3cf7f0ebf55ebf35611939b16ae57841b3f2c8a7ee376e11f9b5f77afe03f5e1f0df468c0d7ddb3019fcd3b083d41e809422bb8aaaa16a1db87ab0579b871378f986dbc65b35a3ea5415ac59b2109375d7ddbacf9bff1eb622cabcdafe1eff1efaf9b5f1ef0eef5816ec05ffef1fbcb4f9cf8f107ec9f3f8964da1b6157a695fb9806915bf4e14f98c269f5e8ff33d8eb84753f25fee7b87f97a9f333e1dcf769f8292557ab1e6fbbf71caf8bf7f78f8f8fffced4f9592a3f750d7bbf4b9b87265f73f3af4740fe8f8efdf09f383e7e3feacb90d4639c0ce734aedc35a5df9707aa278e84876c0fd3a891cbcc52fd1144d0cbb90e26313b8f0aa2922ec9dd87261e0b15a7b39dd758ea4d2f4e04eacffb19e845f416476962b3d87db949e32d9cad7acaa9ae661d94ae0d3d1467cb7633d117aea93299a7e22039827f17ee12c6c37e00639722c57209cd5cb0716842d70de5380ba669277a07ea154a7b509fde3917b49461d1862e06ac0066b2ee8e37dc08ecd3c98fb799975060d5927be2b20c5457cdf8d5484d339146ef165cbba4dc36ed1db2834242f73a946a19bd552312d3942627623dd0b6c22e00ef4c68b4c53810c0f61845cb728ce3fb790868c4f6f6ac81216dc1901c6a06c4366a0bf5e89f95f2ac685eb714067539e6ab9bbadb5d3f4337d4004ee6d6b390c385d3f11cd117762e011ddc3993b075f03301e9972c8ba6ee322cc7fd3c4c2c51299971402b90b60bd6847ca0c7d18c63c181914ff4f5769f8b6eabc683cc466153de45bc671a17773ac0930eab8bb84c389fe1c0a24588bc4a38464065a8061d7357ec4c52e40c8e4c5d40e62be3b4467eaf8f867dcc4652dab2a6907176d13296daf2b32a64ad64296808a9300e99b51a9523aaa20a21837787db13d58e6d8f8a042969dbeee76be6e1060aeb469858d7ce86a96351c2970a3d05515941fea08c002815a5e5a2c855ee0bce914a360806f79cc2183f20a72632ed20d956aa16da1d703bdb08bb3053991fd2dacd9ba1aa755bbaea672047f0cbeda21d78a385126aae78cd4c1db976170c5ae2a1b927d72de7e54ec12654c3def7107be5ea9bb2645c83d967741619f0ce018da3cb4e94f159523458a8d29eaf1c50ca3ab6c28ca2bcc350534d3ee7c024dc0a3a3f58f2762e8fe2c498637174f7c796a279aa679b069627d71b1a2ca3a62319e9478830f58b511d62b477fb5cc716db3dc9698861f2a97388531d9f4ef6d54b1d3e01d4a9d4e29b501e27d81c580be50f32058372bf239d9ec8e9bec641c0bb395bf63648daa566f4383cf9a0b37504aeb35ab7d035179f962e74a76aca8aebe1701825b7bc0c058694382ee023df840544f34a30c1ccfdd8c745e95ea4c360cd582305cb19ba82020d2d4be2b37c16da712e9e2edb3d75d63a9f808083210be58d1f59c77159b7d9a65ba533a365e835598d6a654a042ac0a2390f638a29da5c2a43679227f91a9c6b6bf2987dc95f9c8ced053786e550d7da9924d8ad3a7918905c80fb81576578a4e9bcb26802e1f3db5d0b76ca3616ae44ed33ecb6bac0b2e60d84c856ea08e1e239da5f6f46b103d88b386904a9173273f5479b9c3535810d9bf390c37c1f8a7b7ce2dafe662c4c72cd4a89519c79c18340a52ee3ee345a03ec18521145b24b2a8ab74399bd109c8d01774196d7bd181ba15d5838668350b4b4edca4b367a9020181e7baef29d44e1c476aaf84a4c5be770cfddb6b060e4ce1f6e83e54146d5c8eed14564fae4b1c6ee5c29e2cdedcd6c61d4bc0e88f9882e48b0f05814dd2fb99e6dcb1d174b0c793450473cfa6ec2859c6e0b330bd28199ee2296604def249e601c991b353702fcbc00b22577d4f66877251408c67eafe56a4969a94f9737fc5222c019e2e41378d5d5931598046f2fbdec30e5aea4e06b3bd46cbb6818432e7be288564e4d4244751c4bafcec261024965db81ab79a30c15f6c8122800d7fe783049cdeb072b0fe200a6fa707d3ac2c0e8fd4074b80bef0500228bab19576269e1aada61154f1c73f6ca620471532c7a80cf5a107439cde4be4f51e7bd51393c6a26b7603144cc3805272561f14b9cc40d9c8e5305132980da57bc3bc2384b56937e62315ab8da31d3416a70d86a460b2a4c24cf7eb12b6e233d9c70e46e48be29714215d1aa0075170bec9dd9cd027029cf7a6925e09232322a126d6b905080d82583a4a4d8e9408430b4ab200e4bd502059feee7135590548df63c22f7f862da246bd55ee9b4fa19f62880bc78fa00eb87b21d08dada46f52d5f02445c3cad88610323802024d99d4ae135d2715ad33fd78f5eaae8f640313717f641efdc25a70839d491b365ce7dd05574d81e2d593a884a9117693263c496e78b32b8e2d794aab12be6035c7c9814024ea52192c86117b71abf3b9067accc2f0c9a5b45dcd0e1d13323851b870891767cc1f567ee1a4e32bdf3a58af2668e9e6852a27af3d3be3e304cb207505165c99e1cd526160fb64661e4c9f39951acd705293e12812c89c7c01466a072154ebe59803b96d4ce6ae67c9901ae27a5a3ec9790e529d28240b0badc3897042037c51c12c40a2874588e2392c5bd082671327b566101ed4e5af3d9c7859ece5b311579b4f06945ba04f0e120655756d5131f538f34704fc1254a2e2d93859a8a38b18edc4cad5db77a18a0d03d4661411c6a23096662d0608679ee39d634d97c0229f306a1e97451f053b0684ce15df50ada57ae0e40c91de36483a26052e85afb30785dcf6792ce1d8a83cae1ba8b6df15c4173db65ae599428042be082edb4ac87ded1bd31ea271929a62bb1933a29f5616144a406d6e0fdb237c4c89a76cb6dabdda60111edf42ea99081e8f5d516594871d518c1107edd63a38457d7f34ece78fd51c007a36779d1731a3df6e3638198e71282eb62207306bb33817c442fac05ea09e2c32757909aebc44874d71791999c410c68cc2b482fcb8d4190b82cfa94222b269c73c0b8a02a9c147c5a0a9c90edf5c2464eb79c4efd83ce56537aa32eae7b5dc416addc915977a7569cf7aac6f42ae5cfa427a1039dec95942aed246d7c34050db9724c45ed4cc29908008b01123acb4a53296b1a1b963701173380d1805a4ebdef977015cb3815c7f00432fdd6c494c19dab8bb81f69c3a5b63ca5c429265ca27a31eecad149ee08bfe5ed694bc17869ab197d38309a5c1cf1ebc2d5e14914e3c0be693c9389f793a4aa04d0937611f92ebe94763cbb9c79f02e621611da3cb5ae83e87a76aacf3be46c3b1a90b3bb8be8770cc56841dbcb3788134d4ba534157388fffdf62cfdf584fc4d51b29eff8bf7d370590761f199fdcbf1f9254aabb44ff4b5687a9ed3cf86a27e39d2bfa45510ceefd5c3f7fc52d8f76efc2e577ac8ddc46115766b591e6c3edf026c7cb7287eed3fd7510fe5ded57a191f3da570703f5533cf5ae753716ad47958bd57d92b054270e439f037f715df731c3e69f632d4835b7c47831118fcd2db4fc2807ade6b7cc704e287c3eb0f0af4f4aa5e5a7c5b9d7d7315b27ad22dd26179586f1c6de39b0a6855e3dff4ffecf00fdfc4e5a9cf7f73a487193f1de9535df4bdd7d685e7c3a71c78a6851576fda73a2d0ed7c235fd0dfa7dff5b54b87df23ee4cbe76b9ae73d834b62ac1bd0c9e9f45bd50ebd9af574fb9b16bf7cf8f8e15fcf1568585d120000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:36 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=4273",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    },
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "A player has submitted an action.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Current Game State\n\n{\n  \"board\": [\n    [\n      \"X\",\n      null,\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ]\n  ],\n  \"currentPlayer\": \"player-o\",\n  \"moveCount\": 1,\n  \"playerMarks\": {\n    \"player-x\": \"X\",\n    \"player-o\": \"O\"\n  }\n}\n\n## Player Action\n\nPlayer: \"player-o\"\nResponse: row 0, col 1\n\n## Instructions\n\n1. Interpret the player's response in the context of what was asked.\n2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.\n3. If valid, apply the action: update the game state, emit events describing what happened.\n4. Check for terminal conditions (win/loss/draw).\n5. If the game is over, set isTerminal to true and provide the outcome with scores.\n6. Otherwise, determine which player(s) must act next and return their prompts."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013ad58d7b2a3c8967defaf509c977b27a82e9c10a223e60127218c3042187577dc409008ef7d47fdfba063aaabba6b266626ae1e04b94de6cac54eb3f71f3f6d362fbe570471e075a07df965f3eb2ad96cfe78fd7feacaa20345b72a3e44abb0f29aee4fdbb7df1fdfbcaf26615ff85d5c16ac9765df39bfeb0b2f07abfce5b13eff957b6d079a7f35a0adcaa2052f9ffe6aed358ff607bdac1a30ace8fe8ae5c798befaac53f59e63fff1db4b957933684ec16f6bfba3f573f9dbcba7b5e5bd4ee0a9590d9b727cbe214f855f66cf77f4cbb3712fbde6d5fdd75f7f7b71de3cd5e7a3e8b3ecf74f9b5f9fcfb7d6ff20fbfdcbdf26fd0116b47e13574f284fcc6f10ff95970378f981c397bfc97eff7bbf2f0da87bd0fe5f69fbe0ea4f183f4fff1deaaa29f3ea19352fa7ee1fed662efb66d3f54df169f3e1f979e33e85b9d7a49bb8ddbc72f779634660f3cae8c6ef9b66fdb4d9bcc9ca326d37599c824d17c5ed93e9ff15a73fe4f9f346cb80d7828d1f95e5faf08a0d5891ce1b1f64d9a62b9ff87cf006f8896db56fca210e3e442bef9bb85881804d5836b9d7fdb2594363637cdaac51b16137ff049f1f9f9f31f094226f52e4b797fff8fcffff5a6db72ecdf778fd3745db6b14bf11acbd7e8fefe27f7aebf73957b6ec8beea9c43e7dd52b2b2dedfbb2f8d3e397cd57407f2ea35fdee07df95174bfc4ad099a3c2ebce706117a590bfe62f33d3d5fbeefe2a58bcafe117597f851786b68bd32c4f62543dfb710357420cdac1352e78fea10897039b3f8707f189db8f33864f1119a38a5917ba91f6c8047492c53fd4cf538ddb5064f07d0b9b0d40b6ca4229adc6f574b1bacdd15e3dcc8f12c19777783d119b51ab8898316c151e30d591f84aea620264fadc9396d83e34ef43a91453a27ca0e69da499500968ef6f4b2ac256a800536b5583f148930e9afda851c3ddf6eed134d82ec01fb7606a1d7529d71b167e91b1b5959a4fbc77ebe5ceb1be32413a1060d75c93099163c9f1e79840b30adbd38d0fd9e4ffbe4608eea911fd0515bce48798b14a78f0b5aafc2fda441b44e7470acdb36eca0c7b6c86d0497051d7601dbf2ec1b77bd14c4d73170095515191a3624d483a34bdbd0be5e72bed1408ccf533c412990b6db9de3cc251d71eba72a35a79c78dcb50b8198b33ad9178893c5b4ae6dd8ad59531a551b620144b976b737ca72e2811066ee612c61bba1b173223bdd7ed091d26a29ad05a5a44c3e8cf4c7399a1eb651d146ced8b3fc20250472e0808cefd544305b5a91cee8392027833e8ff92e8f07ff5a9e0892ddfa774ea1db1b0f5a8480ce5e88a89e6aec4c08d5191dead0d09c27f6d6d31962f6c6c0513bf5da210729f3b77b8297d054c8c6fda1e334f388c0215335ce8571bd9866f76663dc975d2d18476c77c8e944c844b3f34f5c761f178a2484ccf500accee762b009be866e42a6e2f4f41874a72b54d42c8291dbfb6e097bb8c716e43541a1915f6e108b5f83fed89676cd5d6cf49246adc9716864b4c2ae549b0229fb0b46cf4c8021a959a13d69b1dd897f8ff50c34bbedd6134f77400884143336bc736322c34101ecd09cea250fca354e2350e140397b557dbb20708ea93966618704610526cf419f063775223dccc140b6ed5da4d05cb83ca78f2c004785086d549bfd9d65d5fb3a2879675bdf1a4cd574dd6d26c4d574d3a00cda327ac2725050331c3d1af496e57323b9ca8c913a9d4def446e6bc6b2801cb811092e3ea3e3c649eb7535ea88f4ce37d5c5c3aa2c4b240696246a9f230d742384eb923385363c0cdf8e82710f1fdafe6001c46c7557a980bf94b6d3b8775615704e9e1fbbf698257b45b99cb6c9c12d0366a9cf65d84187f61882815f926836b8c4d078ff6649e0c05f63c3f6fad0be0c2221ccfa8ef0a4f910b9c67821b1ebc0421dc984d7968b633fbfe2627086d00ce719963ba1aafcd89f9bd622bc8432dd386d5297c5f3822c9829937155dac3a84907ed656710a3b5ee9af595da27b988e2f4bea34773860c7274c9584b2e8a8fc863963cba0a3ac2ba4bb8592b1a5c3ccf0f9eacdc6b1bb6cec1456f53448c9a9eb2798ba4763d249622154150a564e1208a7f4fe32dc1053a70352a7b1436ccb2b915c2a47a29310c769d48638e7171d4b65a4c42aa08f78c7dbfe59a0c510b52c9e7e57ef4684951802f690c63d95780edc3403991655793dea8faa54f3685ebe98948fabd3eee470e514ae4ea67937c5fd236d56cd71fd5436151493d5337bc93640a72833bd3ba93bc65da637777ae9139f88b483cb2244d7ada7af0a5c2f12042f1fe7c51fb82ad104aba4dd74c4e0e57e814348aa0053423f16840c15ef000c843dfe2481e9973e2ed4ecb341a140fdf6f113d4334e27654e34cd512b46c4bbfef65831884de59a1480994ba1eeaa52d23d8ad664767e7a2c9ba0b734ec24d919910a7665bc76aaf0efc3cb7851d6db583b92fd5fee02c084d9f04ba14af9ca3da249a97085d9cdcb8ba6e839032393c2af73124a70276d426c8c21f4a662852d92ab1d9b41842d15e10b306725bf71a23bd5ee3432cabdb561a0ea01d4cb43846052b6987b158891a4c29f72bbabec358b814e4e5e81dfd71a8f402e6273cc0d95b1a46cdd66b2eb220c64d555d7874472964c9e32747d972d0152551933b6b03349a092518b154d214174a0b02c9b0c7bb97448d75624112f638e797290a472f74ca65f7f07b30bbb42f87a92c34838697e01e3f282e5e82182e5cd667ea41df0dfb31c91d25c299cee290eb9e0e90ddd960f01186996ca9f549ad1dc4a39c7ec60ba29fb4e1105abbbc3592ddfe4ec603bc5b147ebf04e5b09bb6e13665823e1c86ea544a7b5a678684c4a0650181b7add69396276c1dc13213a2aceb32314341c6384fa58ff8ac20374796172c01c04a0e3a0dc39597667c9a254561c6cef90695bd60b58f2b2ca013c7cdd89e87017e3d068b2282484cac043b8ac27a77c3c23cd05cf058f8f1725a770258692a756b1680bce07b49af1606de66d8559913ad9ae3a39d9d1781f4547db27795ca2b313f5c2248f5f38c63b252860f4ad1d4637a828eccdc11231fc0094a620d16e15a394fd0be75588025f2adb24fe8a14f9c70a52cbb38ed896bcb41dc6703c8cb54a7469565b607ee1635e50373a73af7931b2e940def39ae33f16e7814da48dcc64a5db6ddddb3c3b34b3d4afdd8ce3bc6055e720ef58a9f2dd93ff51d2e809d00300e96ef203955da4e6c6b49be0948a6efed8ada239646b76724eb0aac61c2f946abe91dd2202d56a4303b457b30e466041de56bc078c81e85b96d28a1129eb3518ee6f495d8b55b3f3b5945189ecb5ed386c4853ca7e96d59a874dfa42f0f2c9d73f5980c875ad55c3cbf0caa23134e8e6683e8337d233561238b4583da1031222e669f10abef50efbc8c5e7d8e1665606d1a5590baf6ee695641ebd022ce4641ae9403da488b75bee077bb16835b8f7a1c16b8e3d5f38b2bf3280c37422ad14e277d7f3b62873b6c9a89f33cb775968f560287a30344a7c6ebe22edc2f270c50f8bc1c9045bce425794aa7b8afd2e604472a0bdcec4a926e1d1f1f2927e3872cd3536a1627b8000c79c43b97e826990bc78065efb12bb91324916946de6aa8f31ca0e5f9beb89463d1eb621bd379bf5e360cd46cf325b0e65419fdf104cb79995d5cfdc65f19dcdfb565cd57f7ea7ecfce798388b02f0d0a33d7c2141c905e0c58b74fb0482086f5b8560077c2ddc7d13fa2be948ca7b73584aef1724bf7497ba8f444b7a081c4ed2a15dced7adc3ccc21a0632220a106a398bb42ee91f1ec57683a2591b56ec67cb2ae6804d64c429e3222389c8d50752e4baf64192c89d27a5bc8cec4b16d4e57d9aa6ffd243c4003ccedb63ea6ca11a639653c28cc64d268b74488008ebcd0de762db0c2a038857e2f85b8ad7bc51697a8abe4af47100eb6bda0d0fb54cdefd0bab28d92b2e31b18349ef21703406ee6593b7e9bde7b4b07da5419a227d1864debb9a2636720a7b4a20ac5a86450927a8c6c4d4a62a907b69d67059ae9bcbb9ceaf171b5e5bd2ce37331c24767807aee4ccb82c940baca97c29c8c923c7a62aab14b61562116452621ce2da7b0e63c22fd590ad8c6bddea11d8a2d66db805c085c367edfaf76741f5cbb7bcc25fdd14005763fefb33d2e465796951cbff3cfd7594cd47a7750fef3db04f0cfcce69b846f4d19b3d72c262f03907d987f4d7b5ec2b888dbc858b3d7b752c0c554b5af79d54b5c04607aad507c6faf80b6f51eaffd2acf7e378ff552d8ac1965b0f9a8d16c7c2fcbfed97ee4a84f70afb05efaa7a7023aefbd62f25618784feecd3205c56b7ef84c0fd75bf3dbc0df5493fe6241bd1b7465e765dfe97062bbfdeaed472060dfaa4edf19a17beaa3876f00b4dc0a2fcebe2d657c53a85a99f4b2b89b9fb33779c7fc260d5d61fc05ff07e13f7df35ddef0fc3b477a4ee38723bde7b3dfb3b647919fde63e02d2c2cd0b4efa5a0075893e7f867ec33f17398796df43ae4cb4711edad4e7337c8a3e77b21531f89ba6b35d2edf95e4f5f7efaf2d37f019b676e1bfb130000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:42 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=5085",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    },
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "A player has submitted an action.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Current Game State\n\n{\n  \"board\": [\n    [\n      \"X\",\n      \"O\",\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ]\n  ],\n  \"currentPlayer\": \"player-x\",\n  \"moveCount\": 2,\n  \"playerMarks\": {\n    \"player-x\": \"X\",\n    \"player-o\": \"O\"\n  }\n}\n\n## Player Action\n\nPlayer: \"player-x\"\nResponse: row 1, col 1\n\n## Instructions\n\n1. Interpret the player's response in the context of what was asked.\n2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.\n3. If valid, apply the action: update the game state, emit events describing what happened.\n4. Check for terminal conditions (win/loss/draw).\n5. If the game is over, set isTerminal to true and provide the outcome with scores.\n6. Otherwise, determine which player(s) must act next and return their prompts."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013ad5759b39aca167ecfafb07cbab74c22a340aace8382208280329b9c4a2134f33c89a4f2df2fbaf74ef64e721feee083b0c6fe7af56aea5bdfdecd6673d7c9bdc8735ad0cc3fcd3e4f9ad9ecdbe3ff6e2bf216e4ed6478514dcad2a9db9fbe4fbf6fafde2717bfcbdd362a72da49d337c1cff6dcc9c0a49f07d3f36be6342da8bfd6a0298bbc01f3f7bf7a3b75d0fc21cb6401fd84ee572c7fc6f42366daaa735ffbdb9779993a3750f3de97497e913e0c5fe6ef27c9796ce06e991cebe27a7f83ef06b7481fefdfefc2a570ea47f8e7cf5fe6d653a47c7fe45d9afefd7ef6f9febc2baddf953ffffffefbfb6fbb7e410b1ab78eca3b963be8278c5fb3a207f33f047cff4df7f7ef79e735a83ad0fca7757b29d64f181f8a7f87baac8bacbcb7cd9c6f675133bb155d3d6bbb3a7f3f7b09fd38b3efcacca993bbc7a36c1f675a08668f9a4eba4f5ff2ffb1aa5ff22ff976eae0fa09c0bd6a33a77975a05f3a0842dd49f81ae51e181e227875c84ff649786dfffef1bf2f7dd34e17edb9fbfe5fbdf3c0dbd5f57415944771dfb473f194f8be77bae8f2f66e44dfffb01fa6fa37cf5dfef3027c9afd40f433cda7277cdfffd4abf3a8d1409d45b973bfefbe9336e0179fb7f5f9fe36c5bc0d8b2e085b350a7267ea934789e82e61d7176c41f59d8e3503338a447f2a4a96e763a5d028da5fabc4d2b6511f8ec16957c40aa1891e7bb9a536f0c86cb55183ea261becc210b0d585ac156dd3a247a68e4d9d197b4068a1cb0552cb35031710a57ce28d5e07b9cf353e925c01a3c0f8f4413aaf34932da3ce873d0e61f9ab1ba63e76dbb3f8907874d7aef89e5a31125a6c14074e796a956409187728326676e2ef7bcb07f0e5b0155a9a52dde6445f026945899660ecaf2e036f637e2820c81c8e84087a58e923cd89ccc8d294aaf2c6ac0dae98bf02176964b2702d04fdd50a7d962824cab98ce028489945c7b81b48c30e178d5aadcc540316dab912ace1a6b42987e2a6507827b83267c8d042bbe20d2eb7150b769682ad37b6080f060dd10d0cc45b2b932bfba09d19508af0e9d88ea9968d9daef9f01e2a9cab2e087db31a6f995d18e1e50a5c616515c8c11ec4e5114b65a396863804b084ece0d58ef7b76806cb26a6977c9b991c4a24142b1ff2a654b4f40c192907bbe7b831a3ad8cd8528210d9c96d2bb447a4dbb50725a0c340953a022ba885549e12e97c39745c961d065224c2859ac605c43078ae971b755cad934e3c1c4c3dbd6a864f43a46f5064abd21b4bd11b8745a9354d1d575ddeabf90696d1336354801f6843f0292733502e6694036ce2106db4ba57b1cd4a6cc6a861f46b76512f081eaf4b9a3835327763500886ea6b230652002b2c40e30eaee3181ecf6db6ed769e96424b5d4e7749b5d0bd88a971989a2a820fab0487fbc5528b522fa4f5d4c16ec97e73a60533e3f39d9860790a91a14e37b94d2785ceb4d859b616358bda50bbc7224787d0c0dbeaa426a6fb71d985d19e8736f46d3097cea961207b3af126a20e8dab91de8ed873d2f9549d158b8ab3283e56a0ea7b94648d65646c61bb4047c8f285b4b1934535226932facb8511cacc813644aa4de03da74bf9b86e71d1d28d1b7aae39035f2e1dc6d339e1e89e37ea761f027e9fef043e16bb5cadd7b286ac58d8c055135c574e939417107af2a94c0ebbc65a7bbe0664a41eb05366dbec7e49c75c35f68ac36b1caaa36b7b130ac74a5e1fb985d25f8808b3d6db5cc01c6995e88cc31e8a5d46aa70bb8fd63e7c424ca8c04617b6cc9ae7b7817ef1b328d217cbb21905cce5b63ba2e24b62c42192398a2105dbc2393f6792e119918a14aa65bb645c0d5ce32ef81c168a40df161ea31df98bb49bb0ee472dc00486c256428651f9d22038b088b00277cc0ab6b64c6deb88b1432fb1798c8c5b04617abd4471338325482083e3a68f0964015729367964bad596d431bca67d9c1b40766cc650e045e4e7104b82c1aaa2d471358a741b2e102343b3091282cfded6c101ef9860870f07844b406b26565296178692881ba21494ed2f0cc53a8ec3898dce08626b06465f774c88643a70f3e3e9ac1c6d1e194114ed0be4a25ac72adac6ae1f0e7b8658e410480fa5c353262741d9e1e649b7352e94178817ed51d9a4dd9221b0845bad5060d91c3e98874dd453fcb265c62beaa0fe996747bf651d9b33f726a3423b3271d66cd841b65cd322b9a1cfab8801e811ec36497e58f0717746dbf3800cb9bbb8dd9a3d4934c35ada9b748b0582128cc18a97d6c3093d2c48cf8ee42dd6c30c5cb943d71bcc991ebb50f7b68081bc7d131747490dd993b5dcc87a92ddb8c203a48c6543a22004aec25040a86d4113872cb3364ead336c4d921708a75b19df3b0546630ed6f6aea82805563513d0842e9aa3b6386739e3202aa77244c3efe0f325bb5eb0bcb95206ddf69712a109a93bd32eb74b2c91a996231dde24e510ad03d06fdb70dd99d3b762c00f1237b290a9a030e9b2c245b0354e1a2e588d083195c6184899c3a5b2926dbcd6ae3b36a242b848984317535b50598290a97b5eddb21ecea367a056d77173e598ed502f483e65a58611afa4734d947127eec42b6cf5036190e51214f6226050cd6ab0e49c937890795127c78281b7c5a5a1a878b9cb05f5d66337c93ed21dd4f9a791b36915cb83bdc4b84a8542378a736e5781817afe86d162afba327d85d4b41c3894c637ae6cb360150b3d959ee94c883a5437ddd484857eb3dddcb203f01d3c748c854c0c141c9317a0d1d71a2baf9e5b77b24e4f6d6332a53952f0a045e2314848f7641314118c0d2bb5831cc80517375015de46cc95e52dcc047ffdf59a55fd640baf58d4c4dad20733c8a616485fdc7f5089b91fe551139e80d33c91655593951f5c65fe6070931afac5ff009ac6091e790ff7bcb300e4a09e689a377b196366ee34c7fca3f9e733f1bb837bc09a77f7c803689de7a1e2893a3fd35fad4840fee05c9305c1c8d5d3c2af06aeb71e28f5ecd016ad93beb1a1080efd887643e0d14f83d91b2798a45e32bc02d03013bc287d4df65fcd7253259d346a6ff7dd6b5b4b7b45ed2618bfe07f29f8bb57e7f284e7ffb9d27d1b7f5ce99923bead1a8ee0ef9e7be0a92d0c5037cfc3520026421a7d403ee21ffcd469c2c792f39739f36992714382732ee881c6c455d536cad74e24a2353f7ff7fdddbf00fe3150b91e0f0000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:45 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=3534",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    },
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "A player has submitted an action.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Current Game State\n\n{\n  \"board\": [\n    [\n      \"X\",\n      \"O\",\n      null\n    ],\n    [\n      null,\n      \"X\",\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ]\n  ],\n  \"currentPlayer\": \"player-o\",\n  \"moveCount\": 3,\n  \"playerMarks\": {\n    \"player-x\": \"X\",\n    \"player-o\": \"O\"\n  }\n}\n\n## Player Action\n\nPlayer: \"player-o\"\nResponse: row 0, col 2\n\n## Instructions\n\n1. Interpret the player's response in the context of what was asked.\n2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.\n3. If valid, apply the action: update the game state, emit events describing what happened.\n4. Check for terminal conditions (win/loss/draw).\n5. If the game is over, set isTerminal to true and provide the outcome with scores.\n6. Otherwise, determine which player(s) must act next and return their prompts."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013ad5859b39bd6b27ef7af50ed17e7144e18c4983726218498410c712a850001629e8794fffb95f6b6633b716edd5b75f480a057afeeaf87d5d0fde7bbddee250caa288b8221ee5f7eddfdf6a0ec767fbe5e9f6b7535c4d5f058f8427a109ba01bbef2befdfefce6fec1721bab70c8ea8a0d8ae2bbcd9fd7aba08c1ff497e4f1ff4719f443dcfdd1c57d53577dfcf2e1efdc4197f43f90f258e98707eea7a03f3fbe5ceba08b3e3e71fdf6f1c5fdf8f261f7f145fdebeff70fbbdfaab1289e8faf8bcf87afc4afd7df7f7fb28463d73d0cd78a608dbba7d08f2fcdebfdcfcb9bc8b29e62b61eabe1b9887ef86b5d0ebabc7fd2fefc76c7afbbbf207d26d66fc407b24f9ffe61f1c3b2acb7e2aeccaae0e9bf5b50f4f10f98e2e981f1efa1f87148fedaf38874f0d9636f50c4e83bfbea3798c16bfc3e1bd2d5f3f30e7af54c5d3cef914fcf87ff9acf7fe48337b8711f7659f304f344fd06f28fa7f75f7eb0e1d33f68bfffc06d5ddc8e71ffff755cd3d565f33c0a2fe2b0cbfadd5a8fdd6e18bbeac3ee4ba0773fb9fff9e563f5b13ac65dfce419d278f7399576afbefaf563f5db6fefddf71f76efd5b7cb577fbc92ffdd454fb9de5367f948b1a7f007ff4399953e75a5c114efae715cedd0ddd339fdaeaf1f69d3bda2e11f87b87bc3fb5cdb05fd2ed89d4c55d9d5d77b1c0ebb391bd2ddfb4794dfef1ec560f7fe11e3f7bb9fe25f925f3efc4bf8a14ffff9e5df42f625adbec6ebe7e5ff18ac77ff1bc7a7eff5bd0c693d26e9606649153ce2f05a07d8b666e82b0a5053df9e725f81f346e7aedee46d4c2b19978940802498492c9a5aa46914515ecb3d86e03c10b8d7a88c4748852e92300b31e93afcfec045f755d0135df43ac23ad837646cf65e568974ba81e6983428586f3462a1a9cc7b92e52c33e89266acc0a1669b19c3534544323dc5ee71e058906edc6a5ab3d7fdcac0e36b10dc8001b5fb337476540f150d45394d79eccb2b63e47783d5fb7a5a6391b1f6304dec31e2789749ae57790e31175e9a669199ee0f6be68e092d61dd17e829f6afc12c52962fc95576916f6c7bacc905bfe73c8aa267b0664be1dcdd0f3cb5d7a84013b5ce806fbea115085b1c0608be2ac5919b843c9837aee03a51f23c42a8e271f5212ca78082e2b303e3f96a54e566619cc1bb700f1391524ecebc955729352887be8c135cd828807082a3ad13b3b6c670d16004bced27ed0e2b1aede729221f81539c8b6401525651a1572cae69402bc009095736c6ce9e7e551ad870ed4d6e3626bd9c64e60072d306c6179e39b4f06664179f923d475f755bd257695562515f74b175f9d2b62155e2518899355cad2faccf65ac0d1988749702c3f0d1b635e8d2005bcf1bd14a652efec385135b7b8caee7266e65fb01bfaf078bb06771813346bc2c88bdbfe839ea31814b27c7869b09e050173aaed4c1aa43aa37607a6032c572945c2e8d6a5aa2d7007d2826b07d518e74c34e09ff969343582a27797f89e275966c59bed06d5336f34961b5864ef8012d30919f29f66e83d536dcee05518180b49fb8591f82fc9296036a1a4e8a06feed089ef03bc3a6d021720d54590b9460e919b48969bbce4e25b096805d825eab214906f2d98273a9f3814077b3cb481cf9ede077ad36e91529442d25ac1771e136c09f63c4755c5e5d085fd7208d6c5dc12c235375d9fba59a258aa7652e8aeba69586458ffdfdd1d03540cb427c0512015d27802460eea0d4d6a1a4eeac70b4840c3fe0a54ef2fdc593b23b5b49be5126830d10d74dccd1d914c82e9a38de740bd3cac8e5e49ded6c6f2585399843b5b4637a604efcd29b6c518064ebc91117cdea2d8a781c54db96641851385e164bf78d5391a5300eb4e59eab4dd49b0f156943b8025e919b9ad47e1ccad2951069c13d50b8384ad322a1bd72cf5336dee02a66b9e85165f34a5b1d87e5e0462334d768ef156ba22523ca664da41c7897d5140c9526b7e87ac0ee9e4165561a1ead413d0bd559e5542bda301f3db040c0ccd70d8aef3d554d61e3194803b2ea5142cabe0a160adbdbb46be4a40ed661312902e754f33d2a2a7c43f0736744d245b7bb51cf14f9783ad5e656509dac9ea5431d2aaa8a5a8adaa77e8b5b3d7e082029f40c1466ae51d69d1cf91ea41b9edbb06d6e706a03ed498ddb1c1a0c89b8167bff0a3bebed783c0dd3b9c6f20a023c694005c01e6faac9f2820ef0540469bdaa219d23297ded2fc45c350c634fa16e780451b2d70ac0249e4a8f74be47af427c1bb2419bdb55c8fbee72433ab8d97398ca5ceda1c6b69bee528c6d38f89ec185fb3c52f59520ccec4ad0462d4efc7e312940953313ea258549892d3f952733ea11c4df30ec591653acb33c4bc487791a0e70929288aed052a9f36fb50faf4c74997c585d90d6ce3a69c9d25ebb799977574f0105e34be64104a0499ab0343456d05693f5b6f028f67a4cae005586981a631e4256171ada6842366f192b1cd855775cfb9181bc2f9d0b35eb64cdbab0cb80500c9ff40da901ca99504908dd4228ad31a793c6a366e4e1719f814662d7f645df3888da569dd41160216f7487cede59a2517cef5a3ccc0a04ebca14989ece5cc7d2a274a7fb377b48ab0dd4e144a999895646944c05e0855a4c454b534491343b49c6605bedcf370d361dcacfb1cc6902c50ef42ba883cbd622e4e2f676b34e91d203b781bd9e817665f63cd45107d7501f72335d3e7ae4e90aed3b3887fdd204e1a6a4cd663d7ba94b54858ef4b87802399473ceb893d110b42c9329ebf99d3d9f7c3164655d356a99af61e8914849d4c6896a649d53ed49103f5f621e41b0b35ee51d0be4b8965a870a3c6a1b09b108250579c3fa34ad9d6f78dee45a8f95da6a5f6c4fafa6402611e5717eddeee2e467b86fe71b473dde64b075387574c1d8c0712ee4632ab637132975eb5107b67c3d90604f9c0db8e558d98f0d0acb63fd200bd7f506ad26061388aa0c6b7c1e977b0d585d63c26e781c52c340ce266a35965b9c0eae3050477c1d63586510d82ae44bcd33924ae71d54c48bbc70f5491cfcadbcd9d7c04d8300941780d18fd7c588a166ad6c0a74fb93a68db47e9145f86685f434ab2d4ac3deb139a27c000e851cd8b37345d615a2054da7c10291366358e2ce8b4151a24a8d9ce72cc37977f190aee7ee4a2158f6a34e322c479976575692a50f4eb3aa61eadcfafe7293d4931032c7e06ad23d7267c7bddaca145d6ad7985b05983891263a237de6f0b087e987730e58cabc757c7d74fbd8a3f0d3de2812ac7a840f63c4884c4bc7e825f076e70a69f5cf1d32f4504538c5401f593760b13629999c6be06d2a314c6d1cfe7027edd5d27940ad49d09bd01b55e66b7f9e85b4d0a425f5cf58d177e6a80e473117ece23ac2ccc9f73a6a60c919951a54de02b513b5a94f2a9ae33407d022ae9725bf053936c96bd254368a8834b54c4979e2d95a934e72efd109745883d8b0581cca657ec5ee853a4e8286d54a523688881f786b2fd85e36d1d415b62ab046049026935eab220b04d5d4dd033215899a2ce7712a522a865b8ab7b5be7f22aaf4189c1c45e401576e55ae86b67ee02ee372597d16d463990d3591ea2f82b11f08f1aaef6fed8587ed6383aa2ba3666c99f8f73116735e89b25869c3b6325d7b5e6bdbe36a32ed8279bd74f9d500f85161627dee045ab31591c8658126bb2330db80bceaa5021cd3ad1490db1553ad7bef418f97ee0c082cc8aefe9ab031e59b54d060dc166ec96cedbb5b4f157718333a254dc019052dfb0ca80a356626eb2cce0d51d3902af7704251715b5b05f96841a4de0f386af46fb9b0d89ada73bab7548b2de4b31a29357977cbbe08cc79ec972e73cbfd121d44474888e2ae694c246ca58d23339c4c095880e71b71d890a3124c4dbfd9d8404f12ac791b00e9cdad1ceff125731f9f5839722995026dfcd1a90ccdc127b755c680bb24a57fb1edb00f5a3fcdef1dc6ae48c6a7c5504a93dfe0a38925230e141d7e7f7c1f934889f91275eac0136a15b91c62dbbdcb4a440b42413a57837baee9acdfebe87174bbb4eaf4b084085c8461cf10a316d0d1941aa1a39061d905ae847b9a941e9083bc5bdcd0090de7e37de3ae0e3c77d57283aefde918fae1b4b8f1c119ac2e0396fc7e82ce2da85d42fcb6c6e4120987447330c58ad7d51d07b40cb79172cfede94ce3b2606da9b33290d501cd15cb57f4729450e8aaf3851e38351b6b1caf82e7346988ecc650b4ca0955ea89633b2bb2d37425976828587427309ecde0909eddf3803cca8fba671ea124c18c6e90e2712624ee1e16ca31bbf3ed32cd0d7080c9c797b9b0ef3d90c9b3a391a423d1d6d052862e9b76ceb06ac7415b3d9537c7332e9cb45eb146b4dc17620460277aa579fb5009c2165a349b70f6354a0e7b3fdbd47056928c83365c705a4c31d88454c291a42e53a8acb28e4da2ca6c2b51c827fb805c270aa6978319003aa7b4d7de014b5e8590620babdad4aefa2ca5c1e5c6df644294d46698c772184bd32ae6981a4f5c22061817ab724074fc893a9f860c6fbbb31b331b431a61230115f1f8f83bc80e244a8179a8225d1f6e5c60107574c884b3a8a087f3d1d4da471f74cfb6cbed883bde782d2a49f21dcd07315c2dc63edfbeed41bf7696df0c081e8d6ef1da45967514175fd8ff6a3b5f6e5995f5a91107fddb30c2b454edaf26f825aba278796d93bfe797e3be0f9257b9f253ee2e89abb80b8638da7d1993edc2a0287eea1f2df5bb2fe05e61bd8ccf9d723c049fa7366fa389cfa308abcee3ea7506f59cc7a024f1a6f89b81def71c24f29961a887a0f86e6d4f205f7787691cb16f83bfef986092a23efc0340cf3de065c5b7c3946f66850f4f064536ac4feb2ddeb5be99193c60fc0dff1787bffb262e6f78fe9b9a9e66fc50d3e779c2f75ea330f2dde71c784b8b4bdcf59f8751495c3e22fc33f20bf6f3ad08faf455e5cb9739e6db0024320821b8adc7f3cd0ddba1d75a42ad7fd6f997779fdefd0ffe0bcf7d7e150000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:51 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=5500",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    },
+    {
+        "scope": "https://generativelanguage.googleapis.com:443",
+        "method": "POST",
+        "path": "/v1beta/models/gemini-2.5-flash:generateContent",
+        "body": {
+            "generationConfig": {
+                "maxOutputTokens": 16384
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "text": "A player has submitted an action.\n\n## Rules Document\n\n# Tic-Tac-Toe\n\n## Game Overview\n\nTic-Tac-Toe is a two-player, turn-based game played on a 3x3 grid. Players alternate placing marks on the board. The first player to get three of their marks in a row (horizontally, vertically, or diagonally) wins. If all cells are filled with no winner, the game is a draw.\n\n## Players\n\nThere are exactly 2 players.\n\n- The **first player** listed in the game config is **\"X\"**.\n- The **second player** listed in the game config is **\"O\"**.\n\nUse each player's ID from the config to identify them throughout the game. The mapping is strictly positional: config `players[0]` is X, config `players[1]` is O.\n\n## Setup\n\nThe initial board is a 3x3 grid where every cell is empty (null).\n\nThe first player (X) takes the first turn.\n\n### Initial Game State\n\n```json\n{\n  \"board\": [\n    [null, null, null],\n    [null, null, null],\n    [null, null, null]\n  ],\n  \"currentPlayer\": \"<players[0] ID>\",\n  \"moveCount\": 0\n}\n```\n\nAt game start, emit a **game_start** event containing the initial state and the list of player IDs.\n\n## Game State\n\nThe game state is an object with three fields:\n\n- `board`: A 3x3 array (array of 3 arrays, each containing 3 elements). Each cell is one of:\n  - `\"X\"` — marked by player 1\n  - `\"O\"` — marked by player 2\n  - `null` — empty, not yet claimed\n- `currentPlayer`: The player ID of the player whose turn it is next.\n- `moveCount`: An integer counting the total number of moves made so far (starts at 0, increments by 1 after each valid move).\n\nRow indices are 0 (top) to 2 (bottom). Column indices are 0 (left) to 2 (right). So `board[row][col]` addresses a specific cell.\n\n## Turns\n\nPlayers alternate turns. Player X (first player) always goes first.\n\nOn each turn:\n\n1. Determine the current player from `state.currentPlayer`.\n2. Send the current player their **view** (see Player Views below).\n3. Receive the player's chosen action.\n4. Validate the action (see Valid Actions below). If invalid, reject it and ask again.\n5. Place the current player's mark (\"X\" or \"O\") in the chosen cell.\n6. Increment `moveCount` by 1.\n7. Emit a **player_move** event with the player ID, the action (row, col), and the resulting board.\n8. Check for a winner or draw (see Winning Conditions and Draw below).\n9. If the game is not over, switch `currentPlayer` to the other player and go to step 1.\n\n## Valid Actions\n\nA player's action is a JSON object specifying which cell to mark.\n\n### Action Schema (JSON Schema)\n\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"row\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    },\n    \"col\": {\n      \"type\": \"integer\",\n      \"minimum\": 0,\n      \"maximum\": 2\n    }\n  },\n  \"required\": [\"row\", \"col\"]\n}\n```\n\n### Validation Rules\n\nAn action is valid if and only if ALL of the following are true:\n\n1. `row` is an integer in [0, 2].\n2. `col` is an integer in [0, 2].\n3. `board[row][col]` is `null` (the cell is empty).\n4. It is this player's turn (`state.currentPlayer` matches the acting player's ID).\n\nIf the action is invalid, do **not** update the state. Inform the player of the error and request a new action.\n\n## Player Views\n\nTic-Tac-Toe has **no hidden information**. Both players see the full board.\n\nWhen sending a player their view, provide a JSON object with:\n\n```json\n{\n  \"board\": <the full 3x3 board array>,\n  \"yourMark\": \"X\" or \"O\",\n  \"currentPlayer\": \"<player ID whose turn it is>\",\n  \"moveCount\": <number of moves made so far>\n}\n```\n\nThe `yourMark` field tells the player which mark is theirs so they know what symbol they are playing.\n\n## Winning Conditions\n\nA player wins if they have three of their marks in a row in any of these 8 lines:\n\n**Rows (3):**\n- `board[0][0], board[0][1], board[0][2]`\n- `board[1][0], board[1][1], board[1][2]`\n- `board[2][0], board[2][1], board[2][2]`\n\n**Columns (3):**\n- `board[0][0], board[1][0], board[2][0]`\n- `board[0][1], board[1][1], board[2][1]`\n- `board[0][2], board[1][2], board[2][2]`\n\n**Diagonals (2):**\n- `board[0][0], board[1][1], board[2][2]`\n- `board[0][2], board[1][1], board[2][0]`\n\nCheck for a winner after every move. If all three cells in any line contain the same non-null mark, that mark's player wins.\n\n## Draw\n\nIf `moveCount` reaches 9 (all cells filled) and no player has won, the game is a draw.\n\n## Scoring\n\nAt game end, assign scores to each player:\n\n| Outcome         | Winner | Loser | Both (draw) |\n|-----------------|--------|-------|-------------|\n| **Score**       | 1      | 0     | 0.5 each    |\n\n## Events\n\nEmit the following events during the game:\n\n1. **game_start** — When the game begins. Include initial state and player IDs.\n2. **player_move** — After each valid move. Include the acting player's ID, the action `{ row, col }`, and the updated board.\n3. **game_end** — When the game ends. Include the final board, the outcome (`\"win\"` or `\"draw\"`), the winner's player ID (if applicable), and the scores for each player.\n\n\n## Current Game State\n\n{\n  \"board\": [\n    [\n      \"X\",\n      \"O\",\n      \"O\"\n    ],\n    [\n      null,\n      \"X\",\n      null\n    ],\n    [\n      null,\n      null,\n      null\n    ]\n  ],\n  \"currentPlayer\": \"player-x\",\n  \"moveCount\": 4,\n  \"playerMarks\": {\n    \"player-x\": \"X\",\n    \"player-o\": \"O\"\n  }\n}\n\n## Player Action\n\nPlayer: \"player-x\"\nResponse: row 2, col 2\n\n## Instructions\n\n1. Interpret the player's response in the context of what was asked.\n2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.\n3. If valid, apply the action: update the game state, emit events describing what happened.\n4. Check for terminal conditions (win/loss/draw).\n5. If the game is over, set isTerminal to true and provide the outcome with scores.\n6. Otherwise, determine which player(s) must act next and return their prompts."
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a board game master. Your job is to interpret the provided rules document faithfully and manage the game state.\n\nResponsibilities:\n- Maintain accurate game state as a JSON object.\n- Track whose turn it is and what actions are valid for each player.\n- Handle hidden information: each player's \"prompt\" must only reference what they are allowed to see according to the rules. Never leak hidden information.\n- When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.\n- After each action, check for terminal conditions (win/loss/draw) as defined by the rules.\n- Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.\n- Use the seed provided at initialization for any randomness required by the rules (shuffling, dice, etc.).\n\nOutput format:\n- Always respond using the provided tool. Never respond with plain text.\n- The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.\n- The \"state\" and event \"data\" fields must be JSON-encoded strings (use JSON.stringify).\n- Each request has a \"playerId\" and a \"prompt\" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.\n- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. \"Choose a team of 2 players from: alice, bob, charlie, diana, eve\").\n- The \"scores\" field in outcome is an array of {playerId, score} objects, not a map."
+                    }
+                ]
+            },
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": "game_master_response",
+                            "description": "Return the updated game state and next actions",
+                            "parameters": {
+                                "required": [
+                                    "state",
+                                    "requests",
+                                    "events",
+                                    "isTerminal"
+                                ],
+                                "type": "object",
+                                "properties": {
+                                    "state": {
+                                        "description": "JSON-encoded complete game state object",
+                                        "type": "string"
+                                    },
+                                    "requests": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "playerId",
+                                                "prompt"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "playerId": {
+                                                    "type": "string"
+                                                },
+                                                "prompt": {
+                                                    "description": "Natural language question or instruction for this player",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "events": {
+                                        "type": "array",
+                                        "items": {
+                                            "required": [
+                                                "description",
+                                                "data"
+                                            ],
+                                            "type": "object",
+                                            "properties": {
+                                                "description": {
+                                                    "type": "string"
+                                                },
+                                                "data": {
+                                                    "description": "JSON-encoded event data object",
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "isTerminal": {
+                                        "type": "boolean"
+                                    },
+                                    "outcome": {
+                                        "required": [
+                                            "scores"
+                                        ],
+                                        "type": "object",
+                                        "properties": {
+                                            "scores": {
+                                                "type": "array",
+                                                "items": {
+                                                    "required": [
+                                                        "playerId",
+                                                        "score"
+                                                    ],
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "playerId": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "number"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [
+                        "game_master_response"
+                    ]
+                }
+            }
+        },
+        "status": 200,
+        "response": [
+            "1f8b0800000000000013b559598fe346927ef7af28d4d32e381e5ee235c03cf0be4552244551b631e04d8af74dd1f07f5f565577bbdd6e637681593d48c98c888c232383919f7efde1e5e5350a9ab8888329195ffff1f2d331f3f2f2ebfbf71bad6da6a4990ec2e7a963b20b86e977de8fcfaf5f8d0f96746ea2a9681b36a8aa3f087fa237419d1cf3afd9f1fbaf3a18a764f8d7908c5ddb8cc9ebdfbee50e866cfcce2a07a5189d64a88b2678d3320d73f2adecc1d3ce53d4beabfbf30207798cda21f9d69dbf72ec5bb9430cfeb3ca4f1c5d153c93418edf1cfd18ffb8bd7e97f9b7efaff16f7543ff17dded5fe8feceec2f7f9afb8e85afc972a4c65f45eefbb6bf1e7916bcd9f4ebcf5f4cfcf978fef94b807e7efddbf114bc67cf1be5601cdaf56d84bc11a2b67a1ffff6f610b6c1f02efed34f3fbfde3e248d2f3fbffcede5a766aeaab7c777e2dbc3ef935f917ef9e5b73f25dd677b93311a8aeecd9a37b3cd772b5f3e1bfb520771f212bcd4ed92fcfd7be1fdeec6fefbd0fce71c7b1b7c3a001f715e8be663a163d024c3f782ff7122ded5ff9b6d7ae77c23c0c77efc156ffb0d2ff4dbff3adce2511e5ef2607c499a3889bf1fe13fcdfdf29d541da7a3befdbf04379a87e138061f89f13dbfdf72836de7667a23627ffb42d783a11c3f65f8ef51fdc7cb179b7e5fe61f1fa6fdf6bdb0bd0e493f27e3c739fcf6dcfe3138df24e3eb94b773964f769135c134bf179457b6b3783a3c01d43273b4757b18bbc95538c153c8c992f36023f8b14dd8e8e29261df4944d93299afa72e9fbb8b0d899969a4f7ee26d33c3ecbce4696bd9d9c744b87645be44c1f5d4d7c745769ef5b0ecbf926d2a309368426bcf05cf1f462fb71c39aee8ae6823a347dc22139636df35d63d3051cc3fedc65e27db1b648cbeca0244fb0948fc34d9300aa40addccd48222428b5d5e1aeadd869924da577a154402426b0ce011cd90baf72bece5da113207ba6d19730b159eb7316b9e2ac136b9978dcb30f2d2f7a6ea009d43729dc9e714cda111a5d72efd48f20f25c9398891eebc3f09fc46697a42385aa955f22d42141d845c26b2914e4b8204863c4054ba0b96ba6c8650f6e54c9aaeb43d6bb7ea043fc7e8a76d0cb2baf74f69164d960e53784c00bd69d8372c171468c19ae71451469dce10e084c585cd39a2305c2af66e8219eca11bb1bec3507b34b4095b6746da852f2877c3d595984f1254f1813ce3081dd59a3188975cdea3a001b3507b6306ac34f4512857af749ecc9ced05ca58a2354e506e8f1bcc8faa660b86740e3b0fa55c8d7748d7b685b3da9fc727aa4917dd2e49cea9ef778f68b4243c6d6f472b6ed020625c29491277e23b63eba0a28b6028c525d4818491a5e04fba609e8b5b1a3d6006eccea544750869d3d8be5fe08a1565ff0f0b92f0576c10613e6d9de6cbd5950c0012ecfedb1f799bac4290f73b79c1109a3dfa034852f18b1f8b111cae065b3f92a8c48a09261916fe81ea03311309790406dbf8e73d4acf956954193d8e8c36161d031b10e4f98a2b3f05965e74ee839083cdfef1ec779562e1bb617757955fbfcd0c855d824b60f79fa85f39309ba6cf4ce13eda536540d93ca4a170707e31aabbe3e8bdb7a8e2af839ed267885c556c7b18d0d0da6f643f3c1a0a81bdc84d321c5da1e2df93a4aa6bb2bef7d8cf7ae24c8a73c28ab89d8b14779bfa3100566e1a5149dee7e4d4a6eacb0e0f02da482a7a04b021856eaac005a6d545374651895bf603adde0d4cc957ce28f76ff98f7672e788997d690c2cbb7353f0a85a20a663dec8f54737aeee4dc76ba8a96139e1b4d4a97b085c3678656661a6ba4640b800e90a26d689b1305a14301a4d5c96aae8a33c4a141c9aa09ed63cfecbd0a888d9f3f9e3e63d61d0f76cd645bcd8085a78b86af9c56eb366de8b3b02f8d025eef19cd1517ffee6efbf50941b4b26603c7d01f7b6572dee02cdea602aa7f76f2c62460c262135ef14a5ec2934548dcba3485b50ac4102cc5fc9920097d0506817b02004bf8d080a07b231af20e6e658d67dd800417fb4e695883a98f2e661a36191f6c574819729d8ba2a41a57c18b36070ce08a24c83e74348acb1e36c03e1e4b35b9382003ea957364b25b0846ed54f7339f9c5b428c7dad71710d0667ae50e66b6ede2f35999bb5283fd6e0e99ed10e9cddb9c96f58c13775417675176831e4fb487214210b25768471c9e5ec35b93b2f587bf3e431114c6b14e099df31e7be9cbb24001cc87c48a090c2cfa24dd68b712fa7818d4ee14c1bcf3b4de1b1736387297c0870d491536c063b51c1ee95d772ece609338470034175297899c9029a3cf14e368987f431124b9833c033a44b0b09624f1aa9bb6b7622fdf5d487054ba5405909312244a86d55d540d4099c039e61cc85047102e5521307aab77106208cb1a0c8b98e67b2a01f78f67c4c5aa9ed2881779c94a0bb49c486a96d058a2f1a9f5d956010534ddca92d765083c74d0d94029a6390f3be26f04da33836767ad43b3d231682e37302ab862e2a72329b57b932d52a4571c1b8ef0ae3c0cb029231ce1c6f9ac4cec60744b0420265d63a501894f415e69e36cee2c2258436341c4414b40211f16c3b75ba7504e262b71952e415da7c10444b130391943a5e8aec608d94d2d6c6468d21a9c56037f50ad1633369ee88e4d4aa1001a3c13e83abc9fa085d09fbbeba1d9d6326335d558bab1e86a23f3089162cdd09e314ebf3b52bdcb1ba3f5bd86e7777b5e3f686128fbb43134781f3d2d4a4e3815abbf6e3dd3b65a65dc10b1d3ff5072aad16d98a4c9cf33089df5dcbf0fbd97bd4a9848a9d45494b3a230cf8a46dd8e4132b96ae88c3b30dd9d8903184f33a925987cf777f9d75bb024b21a64db901f6f50a405119af910ca8c3e9098bb93de657d43d59b84c86929083a56aaf1f67d2ef87799e162c5396190c680625efe7e61e35255588bc59e0c880abae585b30b009fcec054fd3e5f8f64297e79b46336c7ad6825b709498fd1c654a6ad72ddb8bf4e51c5f54da5cb3defa5ca7bdd175855592a1a9c0cda1dcb3ed3acc153207c4a55ed3fc76895b61b3a97902920e5af1db1a9f85156429474d036cdd4e6dba95880ea9a49857282c1b1bbbd4485df5922b95b4dc85ae9c995c3300f592718f72f6f51863eb80a02eb56288684aaad4265f8253e714ca559d9b2ab2fa85b4e7b3e2c5aadd788fdd5f854302e495e829f7f176eef49956b05d05323bbfeb1ad72d173e548f5350b10f8e9b81fb14341637c845204af4c5daacdea18f5a8df694160877bbdf6dbfaba94e45e206e0f04d7db0a96a90e9cadd8f322d38b0c43feec00d8d89e0b6941b0c43b65b5bda3452869358660f5d404012e6c32c6c956eeee90e96840548eb24edf93c85548d24c35e8f0ca4d3e7b8c57284580db697a54f394686996479d78dc977657bb2144140c2a873a79e907643393a9bb8973d24c0ad31315cd7ec675e39ba585064cf33c55de4956bfb7a4a1ecc824e45276c479337aa918a4eda15232f40dfcaf7ee780f4df5d43e3145966659b271c9b5a82149754c9a213253fab12a683d73e516f09ad28819412a28d14b1ac30383d933842b42f38da0c68ee97bfbad71e7c13cabca336bc4b3e5f13abde904a84637f19e542a1624cd2587dc8eb55615177512efdc241babe58aa2fe46f3892a4ba3b24291c702722b7bbe0891e52de8ae0080d59815394ba3233820df94f25a45bb7e724261367b86e0afda7096679915090b832bbf949ce85142a30acf676f1bc0a321e2d43b7ba619b7a9d2d39da20adb2f80ae7f44563560e373a7a55313a37ab873ced3e08687f60c6b20de2f8a756c849c55cf52baa870977641736ca1b26f5a89a201ac52ec942a18280618b07077b9f229a50463bcb3d31b5be09aa344748989cc0967a47c8df036de31252a14eb01a534b7e2d34905960ef5e2ac4cf12eb1cdc75d20195817c7d8ba86c15406c915d837b2c2285e6085565b27a5f366697a821e3c127b3ab6634245caf9e8f7ce61d28bf22de1e4e4b4a6b7301096da0036d91fd93651e3d6682fb88d57b371e35a355ddc082dd1a712a166c49c9f75d28d1ab95d9c1ba4b6cc824990c481de143dc7861a4d95c0a8e67cda4c72d6e7568f9b342d29a2c9bbe2d89c1df0a640f09badd29e17c2539d8eb3c00cdc5b02d169e07c59781940c5353ccd052f4ba079a9c62b298bf05929f08b1220b031f2c9058ae4ab70e29e9c79e29247a9412c253fece9aab5c3c0c0e7ecb88fb4798ced18293636882031068460e866d23978185640a4be4b312946d08ec96f8d42421b03d961529c1382f74f9a705bef3241dfeee5f6403abf36ddc9018519f175487063a55ae053071005092280462e16777486b7071238fa1203376cb6b4f54c90d754640c9133ce8f0a3a4b18eab10ffe61657a423a6a710fd05dc288b62896d10a7b5ece6d38f3332ed6bd0697b4ab8d03a7e50e97e3c28b2978c20a18183b659a63092957ede84778fd9679decc64a21ba3ae9ae0ec496f881ea02c81c5922b1d802953e8dd4dd8a8fd64cc590af6da55f4a3b4cbb37bc862413ea23241cd7c93caac700dfa06db279b81154a60199ccba1e6bede17fcd1c76af5b82e4799518b6dd684d23952699e1f9b6fe33be2e31ce7ccf0939683c12fcd743207ac2414c2b1b66a9bd87c872b20b0543697103c26a9217b021ba5f1f9c9e96342bad30f4372f9414d3cad35f0927c86679fd8a4d6b1cb2579b25dc97ed4b685368601e9d1fae8e165a66f4ba1eae39be412a9c1392b678ba50e21f77b450681d220b14e437ecc73968dab18045e72348cbd4caa386fd419e7c43a74eecfa3742dd8c10570a5403bcc51fac9ea45a2c13666c988fb703903a69e4d11d32d1c9a90b9824d237e5ccf4ef7a9e3387dd4fd460feec4a820e4a9228efe33518fdb87d954c8552450d826e4283d0fee3dc197bc6db2e7c87a97703a8e3e83de97b5e7a8b28463f5ea0cd8d260c233abc0d0bf9d13c067efecdea53d663ab787e0d4e26e64101cf9ae72f45252a8bd757fee6250fc39e28b9b54867defb2349f79baae2ff4b6ab57598f16ad693510274eb5d6d2c5989f25e53cc1ed19729e81a61d6e93db159861c14253956a4f51a57537f429c4130581a531f1a74cbd591fef70c96a7425e778b14cf059d6325328ad7937cf2467d37ecdb4a43e1b32b35efa123c3d0ded0c8e03f588efbe5e00be60f85c54ea0e585f0c83d3ed59ad669ae8dcf93c64cae0d8bd17dd72bd75e660638fcb50bb11da03dad9b1c8fef9cfafa1a1df518fafa0a0d7a1adde118eba8d93ea33fb1748e4352d9ac3f34b128c1fd093ed18e617b8e5b568e264fb1a70fdc4af27e31864efebea6febbe6449930cc194c42f9f21f09728a8aaff1afffb137af566dcbb59aff39ba49e4cc127e0ef03167ced86b6ee26a72d93e61d367a433b4f24f5a1f82bb0fe8f1cd4e913c3d44e41f5071a4a52f017e9284f62f603d4ff03134c529f557c65c0c81de615d5d718ef57ff031c910caa627abe79eff037e72b74ea30e31bfb3f07fc87aff6e5c39effa4a63737beabe913d6f5c7a81d1d15f9c3a724f8c88b6b328c9fb0c72ca98f2dfe11f93bf6635a0563feaef3f5f39f141fc87ab21162705c9638d2b8d45369fe3848d28f74f6fac36f3ffc0f377b254d5b190000"
+        ],
+        "rawHeaders": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-encoding": "gzip",
+            "content-type": "application/json; charset=UTF-8",
+            "date": "Fri, 27 Mar 2026 06:06:57 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=6151",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-gemini-service-tier": "standard",
+            "x-xss-protection": "0"
+        },
+        "responseIsBinary": false
+    }
+]
