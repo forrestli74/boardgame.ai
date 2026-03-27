@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { z } from 'zod'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
-import type { Game } from './core/game.js'
+import type { Game, GameFlow } from './core/game.js'
 import type { Player } from './core/player.js'
 import type { GameConfig, GameResponse, GameOutcome, ActionRequest } from './core/types.js'
 import type { GameEvent } from './core/events.js'
@@ -16,81 +16,58 @@ const OptionsSchema = z.object({ rounds: z.number().int().default(3) })
 
 class GuessingGame implements Game {
   readonly optionsSchema = OptionsSchema
-  private players: string[] = []
-  private targets = [7, 3, 9]
-  private round = 0
-  private maxRounds = 3
-  private wins: Record<string, number> = {}
-  private gameId = ''
 
-  init(config: GameConfig): GameResponse {
-    this.gameId = config.gameId
-    this.players = config.players.map(p => p.id)
-    this.players.forEach(id => { this.wins[id] = 0 })
+  play(config: GameConfig): GameFlow {
+    const players = config.players.map(p => p.id)
     const opts = OptionsSchema.parse(config.options ?? {})
-    this.maxRounds = opts.rounds
+    const maxRounds = opts.rounds
+    const targets = [7, 3, 9]
+    const wins: Record<string, number> = {}
+    players.forEach(id => { wins[id] = 0 })
 
-    return {
-      requests: this.players.map(id => ({
-        playerId: id,
-        view: { round: this.round + 1, maxRounds: this.maxRounds },
-        actionSchema: GuessSchema,
-      })),
-      events: [this.gameEvent({ type: 'start', players: this.players })],
-    }
-  }
+    const gameEvent = (data: unknown): GameEvent => ({
+      source: 'game', gameId: config.gameId, data, timestamp: new Date().toISOString(),
+    })
 
-  private guesses: Record<string, number> = {}
+    return (function* () {
+      let pendingEvents: GameEvent[] = [gameEvent({ type: 'start', players })]
 
-  handleResponse(playerId: string, action: unknown): GameResponse {
-    this.guesses[playerId] = action as number
+      for (let round = 0; round < maxRounds; round++) {
+        // Request guesses from all players, include any pending events
+        const guesses: Record<string, number> = {}
+        const first = yield {
+          requests: players.map(id => ({
+            playerId: id,
+            view: { round: round + 1, maxRounds },
+            actionSchema: GuessSchema,
+          })),
+          events: pendingEvents,
+        }
+        pendingEvents = []
+        guesses[first.playerId] = first.action as number
 
-    if (Object.keys(this.guesses).length < this.players.length) {
-      return { requests: [], events: [] }
-    }
+        // Collect remaining guesses
+        while (Object.keys(guesses).length < players.length) {
+          const { playerId, action } = yield { requests: [], events: [] }
+          guesses[playerId] = action as number
+        }
 
-    // All guesses in — resolve round
-    const target = this.targets[this.round]
-    let bestDist = Infinity
-    let winner = ''
-    for (const [id, guess] of Object.entries(this.guesses)) {
-      const dist = Math.abs(guess - target)
-      if (dist < bestDist) { bestDist = dist; winner = id }
-    }
-    this.wins[winner]++
-    this.round++
+        // Resolve round
+        const target = targets[round]
+        let bestDist = Infinity
+        let winner = ''
+        for (const [id, guess] of Object.entries(guesses)) {
+          const dist = Math.abs(guess - target)
+          if (dist < bestDist) { bestDist = dist; winner = id }
+        }
+        wins[winner]++
 
-    const events: GameEvent[] = [
-      this.gameEvent({ type: 'round-result', round: this.round, target, guesses: { ...this.guesses }, winner }),
-    ]
-    this.guesses = {}
+        // Queue round-result event for next yield (or discard on last round — outcome captures it)
+        pendingEvents = [gameEvent({ type: 'round-result', round: round + 1, target, guesses, winner })]
+      }
 
-    if (this.isTerminal()) {
-      events.push(this.gameEvent({ type: 'end', wins: { ...this.wins } }))
-      return { requests: [], events }
-    }
-
-    return {
-      requests: this.players.map(id => ({
-        playerId: id,
-        view: { round: this.round + 1, maxRounds: this.maxRounds },
-        actionSchema: GuessSchema,
-      })),
-      events,
-    }
-  }
-
-  isTerminal(): boolean {
-    return this.round >= this.maxRounds
-  }
-
-  getOutcome(): GameOutcome | null {
-    if (!this.isTerminal()) return null
-    return { scores: { ...this.wins } }
-  }
-
-  private gameEvent(data: unknown): GameEvent {
-    return { source: 'game', gameId: this.gameId, data, timestamp: new Date().toISOString() }
+      return { scores: { ...wins } }
+    })()
   }
 }
 
