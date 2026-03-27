@@ -12,7 +12,8 @@ import { useHttpRecording } from '../../test-utils/http-recording.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const RULES_PATH = join(__dirname, '../../../rules/avalon.md')
 const LOG_FILE = '/tmp/boardgame-avalon-integration.jsonl'
-const SKIP = !process.env.GEMINI_API_KEY
+const CASSETTE_DIR = join(__dirname, '__fixtures__')
+const SKIP = !process.env.GEMINI_API_KEY && !existsSync(CASSETTE_DIR)
 
 /** Always approves, succeeds quests, proposes first N players, assassinates last player. */
 class FixedAvalonPlayer implements Player {
