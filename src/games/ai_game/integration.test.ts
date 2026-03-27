@@ -25,7 +25,7 @@ class FixedTTTPlayer implements Player {
   constructor(
     readonly id: string,
     readonly name: string,
-    private moves: Array<{ row: number; col: number }>,
+    private moves: string[],
   ) {}
 
   private idx = 0
@@ -50,13 +50,13 @@ describe.skipIf(SKIP)('integration: AI Game', () => {
     // O plays: (0,1), (0,2)
     const players = new Map<string, Player>([
       ['player-x', new FixedTTTPlayer('player-x', 'Player X', [
-        { row: 0, col: 0 },
-        { row: 1, col: 1 },
-        { row: 2, col: 2 },
+        'row 0, col 0',
+        'row 1, col 1',
+        'row 2, col 2',
       ])],
       ['player-o', new FixedTTTPlayer('player-o', 'Player O', [
-        { row: 0, col: 1 },
-        { row: 0, col: 2 },
+        'row 0, col 1',
+        'row 0, col 2',
       ])],
     ])
 

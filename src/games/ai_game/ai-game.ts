@@ -4,9 +4,11 @@ import type { Game, GameFlow } from '../../core/game.js'
 import type { GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
 import type { GameEvent } from '../../core/events.js'
 import { registry, DEFAULT_MODEL } from '../../core/llm-registry.js'
-import { jsonSchemaToZod, LLMGameResponseSchema, parseState, parseView, parseActionSchema, parseEventData, scoresToRecord } from './schemas.js'
+import { LLMGameResponseSchema, parseState, parseEventData, scoresToRecord } from './schemas.js'
 import type { LLMGameResponse } from './schemas.js'
 import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildBatchActionMessage } from './prompts.js'
+
+const TextSchema = z.string()
 
 export class AIGame implements Game {
   readonly optionsSchema = z.object({})
@@ -83,7 +85,6 @@ export class AIGame implements Game {
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
     for (let attempt = 0; attempt < 3; attempt++) {
       const result = await generateText({
-        // Cast: model is a 'provider:model' string; registry expects a branded type
         model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
@@ -109,8 +110,8 @@ export class AIGame implements Game {
   private processLLMResponse(llmResponse: LLMGameResponse, gameId: string): { requests: ActionRequest[]; events: GameEvent[] } {
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
-      view: parseView(req.view),
-      actionSchema: jsonSchemaToZod(parseActionSchema(req.actionSchema)),
+      view: req.prompt,
+      actionSchema: TextSchema,
     }))
 
     const timestamp = new Date().toISOString()

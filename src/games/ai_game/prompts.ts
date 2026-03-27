@@ -9,7 +9,7 @@ export function buildSystemPrompt(): string {
 Responsibilities:
 - Maintain accurate game state as a JSON object.
 - Track whose turn it is and what actions are valid for each player.
-- Handle hidden information: each player's "view" must contain ONLY what they are allowed to see according to the rules. Never leak hidden information.
+- Handle hidden information: each player's "prompt" must only reference what they are allowed to see according to the rules. Never leak hidden information.
 - When a player submits an action, validate it against the current rules and state. Reject invalid actions by re-requesting the same player's turn.
 - After each action, check for terminal conditions (win/loss/draw) as defined by the rules.
 - Be deterministic: do not invent rules, add house rules, or make subjective judgments. Follow the rules document exactly.
@@ -18,8 +18,9 @@ Responsibilities:
 Output format:
 - Always respond using the provided tool. Never respond with plain text.
 - The tool response must include the complete current game state, action requests for the next player(s), any events that occurred, and whether the game has ended.
-- The "state", "view", "actionSchema", and event "data" fields must be JSON-encoded strings (use JSON.stringify), not raw objects. For example: "state": "{\"board\":[[null,null,null]],\"currentPlayer\":\"p1\"}"
-- The "actionSchema" field must be a JSON Schema string with "type", "properties", and "required" fields.
+- The "state" and event "data" fields must be JSON-encoded strings (use JSON.stringify).
+- Each request has a "playerId" and a "prompt" field. The prompt is a natural language question or instruction for that player, describing what they see and what action they need to take. Include all relevant game state visible to that player in the prompt text.
+- Players will respond with a plain text answer to your prompt. Design prompts so the expected response format is clear (e.g. "Choose a team of 2 players from: alice, bob, charlie, diana, eve").
 - The "scores" field in outcome is an array of {playerId, score} objects, not a map.`
 }
 
@@ -48,7 +49,7 @@ ${config.options !== undefined ? `\nOptions: ${JSON.stringify(config.options)}` 
 
 ## Instructions
 
-Set up the initial game state according to the rules. Use the seed for any randomness (shuffling, role assignment, etc.). Return the initial state and action requests for the first player(s) who must act.`
+Set up the initial game state according to the rules. Use the seed for any randomness (shuffling, role assignment, etc.). Return the initial state and prompts for the first player(s) who must act.`
 }
 
 /**
@@ -74,16 +75,16 @@ ${JSON.stringify(state, null, 2)}
 ## Player Action
 
 Player: "${playerId}"
-Action: ${JSON.stringify(action, null, 2)}
+Response: ${typeof action === 'string' ? action : JSON.stringify(action, null, 2)}
 
 ## Instructions
 
-1. Validate the action against the rules and current state.
-2. If invalid, return the same state and re-request an action from this player with an explanation in an event.
+1. Interpret the player's response in the context of what was asked.
+2. If the response doesn't make sense or is invalid, return the same state and re-prompt this player with a clearer question.
 3. If valid, apply the action: update the game state, emit events describing what happened.
 4. Check for terminal conditions (win/loss/draw).
 5. If the game is over, set isTerminal to true and provide the outcome with scores.
-6. Otherwise, determine which player(s) must act next and return their action requests with appropriate views and action schemas.`
+6. Otherwise, determine which player(s) must act next and return their prompts.`
 }
 
 /**
@@ -98,7 +99,8 @@ export function buildBatchActionMessage(
     if (action === null) {
       return `- Player "${playerId}": Failed to submit a valid action (treat as abstain/skip per rules)`
     }
-    return `- Player "${playerId}": ${JSON.stringify(action, null, 2)}`
+    const response = typeof action === 'string' ? action : JSON.stringify(action, null, 2)
+    return `- Player "${playerId}": ${response}`
   }).join('\n')
 
   return `Multiple players have submitted actions simultaneously.
@@ -111,17 +113,16 @@ ${rulesDoc}
 
 ${JSON.stringify(state, null, 2)}
 
-## Player Actions (in order received)
+## Player Responses (in order received)
 
 ${actionList}
 
 ## Instructions
 
-1. Validate each action against the rules and current state.
-2. For any invalid action, emit an event explaining the rejection and re-request that player's turn.
-3. For valid actions, apply them all to the game state in the order listed above.
+1. Interpret each player's response in context.
+2. For any invalid response, emit an event explaining the rejection and re-prompt that player.
+3. For valid responses, apply them all to the game state in the order listed above.
 4. After applying all actions, check for terminal conditions (win/loss/draw).
 5. If the game is over, set isTerminal to true and provide the outcome with scores.
-6. Otherwise, determine which player(s) must act next and return their action requests.`
+6. Otherwise, determine which player(s) must act next and return their prompts.`
 }
-

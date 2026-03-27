@@ -15,42 +15,25 @@ const LOG_FILE = '/tmp/boardgame-avalon-integration.jsonl'
 const CASSETTE_DIR = join(__dirname, '__fixtures__')
 const SKIP = !process.env.GEMINI_API_KEY && !existsSync(CASSETTE_DIR)
 
-/** Always approves, succeeds quests, proposes first N players, assassinates last player. */
+/** Responds to text prompts with simple text answers. */
 class FixedAvalonPlayer implements Player {
   constructor(readonly id: string, readonly name: string) {}
 
   async act(request: ActionRequest): Promise<unknown> {
-    const view = request.view as Record<string, unknown>
+    const prompt = (request.view as string).toLowerCase()
 
-    // Team proposal: pick first N players
-    if (view.leader === this.id && !view.proposedTeam) {
-      const players = (view.players ?? []) as string[]
-      const teamSize = this.inferTeamSize(view)
-      return { team: players.slice(0, teamSize) }
+    if (prompt.includes('team') && prompt.includes('choose')) {
+      // Propose first players mentioned or default
+      return 'alice, bob'
     }
-
-    // Assassination: pick last player
-    if ((view.yourRole === 'Assassin' && view.playerList) || view.phase === 'assassination') {
-      const players = (view.playerList ?? view.players ?? []) as string[]
-      return { target: players[players.length - 1] }
+    if (prompt.includes('assassin') || prompt.includes('assassination')) {
+      return 'eve'
     }
-
-    // Quest: always succeed
-    if (view.proposedTeam || view.phase === 'quest_execution') {
-      return { questVote: 'success' }
+    if (prompt.includes('quest') || prompt.includes('success') || prompt.includes('fail')) {
+      return 'success'
     }
-
-    // Default: approve votes
-    return { vote: 'approve' }
-  }
-
-  private inferTeamSize(view: Record<string, unknown>): number {
-    const quest = ((view.currentQuest as number) || 1) - 1
-    for (const key of ['quests', 'questConfiguration'] as const) {
-      const cfg = view[key] as Array<Record<string, unknown>> | undefined
-      if (cfg?.[quest]?.teamSize) return cfg[quest].teamSize as number
-    }
-    return (view.teamSize as number) ?? 2
+    // Default: approve
+    return 'approve'
   }
 }
 
