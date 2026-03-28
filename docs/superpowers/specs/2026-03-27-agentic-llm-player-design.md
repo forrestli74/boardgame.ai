@@ -43,97 +43,64 @@ The LLM outputs reasoning + updated memory + action in a single structured respo
 
 ### System Prompt
 
-```
-You are {name}, playing a board game.
+Concatenated from parts, not formatted with templates. Each part is optional and appended if present:
 
-{strategyDoc}
+1. Base instruction (always): "You are a board game player. ..."
+2. `persona` (if provided)
+3. `strategyDoc` (if provided)
+4. Memory instruction (always): "You have a private memory that persists between turns. Keep it concise — under {memoryCap} words."
+5. Reasoning instruction (always): "Think carefully before acting. Your reasoning is private."
 
-Your role: {role info from view, if available}
+Role info comes from the `view` (set by the game), not the player prompt.
 
-You have a private memory that persists between turns. Use it to track observations,
-suspicions, and plans. Keep it concise — under {memoryCap} words. Focus on what matters
-most for your next decisions.
+### Reasoning — Internal to LLMPlayer
 
-Think carefully before acting. Your reasoning is private and will not be shared with
-other players.
+`LLMPlayer.act()` returns only the action. Reasoning and memory are internal — the `Player` interface and Engine don't change.
 
-{persona}
-```
+The LLM returns `{ reasoning, memory, action }` via tool use. `LLMPlayer.act()` extracts `action` to return, stores `memory` and `reasoning` internally.
 
-### Player Interface
+**Dev visibility options for reasoning/memory (pick later):**
 
-The `Player` interface has `act(request) → Promise<unknown>`. The Engine validates the action via `actionSchema`. But now the LLM returns `{ reasoning, memory, action }` — the Engine only sees `action` after extraction.
+1. **Event callback** — `LLMPlayerOptions.onThought?: (data: { reasoning, memory, action }) => void`. Called after each `act()`. Devs wire it to logging, console, etc. No interface change.
+2. **Accessor methods** — `player.getMemory()`, `player.getLastReasoning()`. Devs inspect after the game. No interface change.
+3. **Both** — callback for real-time, accessors for post-game analysis.
 
-The extraction happens inside `LLMPlayer.act()`:
-1. Call LLM with wrapped schema (`{ reasoning, memory, action: <original schema> }`)
-2. Extract `action` to return to Engine
-3. Store `memory` internally
-4. Store `reasoning` for the Engine's player event (via a getter or the return value)
-
-Problem: the `Player` interface returns `Promise<unknown>` — there's no way to pass reasoning back. Options:
-
-**Option A**: Return the full `{ reasoning, memory, action }` object. The Engine's `actionSchema.safeParse()` will fail since it expects just the action. The Engine retries, which breaks things.
-
-**Option B**: Return just `action`. Store reasoning internally. Add a `lastReasoning` getter. The Engine checks for it after `act()` and includes it in the player event.
-
-**Option C**: Wrap the action schema at the Engine level to include reasoning. This couples Engine to LLM players.
-
-**Chosen: Option B** — minimal interface change. The Engine already constructs player events (line 53-59 in engine.ts). It can check for `lastReasoning` on the player:
-
-```typescript
-// In Engine, after getting the action:
-const reasoning = 'lastReasoning' in player ? (player as any).lastReasoning : undefined
-this.emit({
-  source: 'player',
-  gameId: config.gameId,
-  playerId: response.playerId,
-  data: parsed,
-  reasoning,
-  timestamp: new Date().toISOString(),
-})
-```
-
-The `PlayerEventSchema` already has `reasoning: z.string().optional()` — it's already in the event schema.
+For now, implement **option 3**. The callback is optional (noop if not provided). Accessors are always available.
 
 ## Constructor
+
+Constructor signature unchanged: `constructor(id: string, name: string, options?: LLMPlayerOptions)`
 
 ```typescript
 interface LLMPlayerOptions {
   model?: string
   persona?: string
-  strategyDoc?: string
-  memoryCap?: number  // soft cap in words, default 300
-}
-
-class LLMPlayer implements Player {
-  readonly id: string
-  readonly name: string
-  lastReasoning?: string  // public getter for Engine
-
-  constructor(id: string, name: string, options?: LLMPlayerOptions)
+  strategyDoc?: string    // new — role strategy doc, sent in full
+  memoryCap?: number      // new — soft cap in words, default 300
 }
 ```
+
+No new public fields on the class. `Player` interface unchanged.
 
 ## Files
 
 ```
 src/players/llm-player.ts        # Replace current implementation
 src/players/llm-player.test.ts   # Update tests
-src/core/engine.ts                # Check for lastReasoning on player
 ```
 
 ## What Changes
 
-- `LLMPlayer`: adds memory (instance state), chain-of-thought, strategy doc, wraps action schema
-- `Engine`: reads `lastReasoning` from player after `act()`, includes in player event
-- `LLMPlayerOptions`: adds `strategyDoc`, `memoryCap`
-- System prompt: completely rewritten with memory + reasoning instructions
+- `LLMPlayer`: adds memory (instance state), chain-of-thought, strategy doc, wraps action schema, `onThought` callback, `getMemory()`/`getLastReasoning()` accessors
+- `LLMPlayerOptions`: adds `strategyDoc`, `memoryCap`, `onThought`
+- System prompt: rewritten with memory + reasoning instructions (concatenated parts)
 
 ## What Doesn't Change
 
 - `Player` interface — still `act(request) → Promise<unknown>`
+- `Engine` — no changes
 - `ActionRequest` — still `{ playerId, view, actionSchema }`
-- `GameEvent` / `PlayerEventSchema` — already supports `reasoning` field
+- Constructor signature — still `(id, name, options?)`
 - How games work — games still yield requests, get actions back
 - Discussion module — unaffected
 
