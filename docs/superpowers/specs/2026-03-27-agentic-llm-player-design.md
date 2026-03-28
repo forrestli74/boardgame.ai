@@ -25,7 +25,7 @@ Each turn produces private reasoning before the action. The reasoning is:
 
 ### Role Strategy Document
 
-A single markdown document covering strategy for all roles. Sent in full to every player — the prompt says "you are [role], focus on your section." The document is optional and provided via constructor.
+A single markdown document covering strategy for all roles. Included as part of the `persona` string — no new option needed. The caller concatenates persona + strategy into one string.
 
 ### LLM Call Structure
 
@@ -43,15 +43,14 @@ The LLM outputs reasoning + updated memory + action in a single structured respo
 
 ### System Prompt
 
-Concatenated from parts, not formatted with templates. Each part is optional and appended if present:
+Concatenated from parts, not formatted with templates:
 
 1. Base instruction (always): "You are a board game player. ..."
-2. `persona` (if provided)
-3. `strategyDoc` (if provided)
-4. Memory instruction (always): "You have a private memory that persists between turns. Keep it concise — under {memoryCap} words."
-5. Reasoning instruction (always): "Think carefully before acting. Your reasoning is private."
+2. `persona` (if provided) — may include strategy doc, personality, etc.
+3. Memory instruction (always): "You have a private memory that persists between turns. Keep it concise, under 300 words."
+4. Reasoning instruction (always): "Think carefully before acting. Your reasoning is private."
 
-Role info comes from the `view` (set by the game), not the player prompt.
+Memory cap (300 words) is hardcoded in the prompt. Role info comes from the `view` (set by the game), not the player prompt.
 
 ### Reasoning — Internal to LLMPlayer
 
@@ -69,18 +68,16 @@ For now, implement **option 3**. The callback is optional (noop if not provided)
 
 ## Constructor
 
-Constructor signature unchanged: `constructor(id: string, name: string, options?: LLMPlayerOptions)`
+Constructor signature and options unchanged:
 
 ```typescript
 interface LLMPlayerOptions {
   model?: string
-  persona?: string
-  strategyDoc?: string    // new — role strategy doc, sent in full
-  memoryCap?: number      // new — soft cap in words, default 300
+  persona?: string  // includes strategy doc if desired
 }
 ```
 
-No new public fields on the class. `Player` interface unchanged.
+Caller puts strategy + personality in `persona`. No new options.
 
 ## Files
 
@@ -91,8 +88,8 @@ src/players/llm-player.test.ts   # Update tests
 
 ## What Changes
 
-- `LLMPlayer`: adds memory (instance state), chain-of-thought, strategy doc, wraps action schema, `onThought` callback, `getMemory()`/`getLastReasoning()` accessors
-- `LLMPlayerOptions`: adds `strategyDoc`, `memoryCap`, `onThought`
+- `LLMPlayer`: adds memory (instance state), chain-of-thought, wraps action schema, `onThought` callback, `getMemory()`/`getLastReasoning()` accessors
+- `LLMPlayerOptions`: unchanged (persona carries strategy doc)
 - System prompt: rewritten with memory + reasoning instructions (concatenated parts)
 
 ## What Doesn't Change
