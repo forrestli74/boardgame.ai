@@ -7,7 +7,6 @@ import type { PlayerAction } from './game.js'
 export interface DiscussionStatement {
   playerId: string
   content: string
-  lastSeen?: { playerId: string; content: string }
 }
 
 export interface DiscussionResult {
@@ -66,14 +65,6 @@ export class BroadcastDiscussion implements Discussion {
     for (let round = 0; round < this.maxRounds; round++) {
       if (activePlayers.length === 0) break
 
-      const lastSeen =
-        previousStatements.length > 0
-          ? {
-              playerId: previousStatements[previousStatements.length - 1].playerId,
-              content: previousStatements[previousStatements.length - 1].content,
-            }
-          : undefined
-
       const requests: ActionRequest[] = activePlayers.map(id => ({
         playerId: id,
         view: {
@@ -113,7 +104,7 @@ export class BroadcastDiscussion implements Discussion {
       for (const s of roundStatements) {
         if (s.content !== '') {
           allPassed = false
-          allStatements.push({ playerId: s.playerId, content: s.content, lastSeen })
+          allStatements.push({ playerId: s.playerId, content: s.content })
           previousStatements.push({ playerId: s.playerId, content: s.content })
         }
       }

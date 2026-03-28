@@ -63,7 +63,7 @@ function makeConfig(playerIds: string[]): GameConfig {
 // ---- BroadcastDiscussion tests ----
 
 describe('BroadcastDiscussion', () => {
-  it('single round, all speak — statements collected with lastSeen=undefined', async () => {
+  it('single round, all speak — statements collected', async () => {
     const discussion = new BroadcastDiscussion(1)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
@@ -86,9 +86,7 @@ describe('BroadcastDiscussion', () => {
     const bobStmt = result.statements.find(s => s.playerId === 'bob')!
 
     expect(aliceStmt.content).toBe('I trust bob')
-    expect(aliceStmt.lastSeen).toBeUndefined()
     expect(bobStmt.content).toBe('I agree with alice')
-    expect(bobStmt.lastSeen).toBeUndefined()
 
     // The last round's event is in pendingEvents (not yet emitted by engine)
     expect(result.pendingEvents).toHaveLength(1)
@@ -98,7 +96,7 @@ describe('BroadcastDiscussion', () => {
     expect((roundEvent.data as any).statements).toHaveLength(2)
   })
 
-  it('two rounds — round 1 event emitted, round 2 event in pendingEvents, lastSeen set on round 2', async () => {
+  it('two rounds — round 1 event emitted, round 2 event in pendingEvents', async () => {
     const discussion = new BroadcastDiscussion(2)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
@@ -122,19 +120,6 @@ describe('BroadcastDiscussion', () => {
 
     // 4 statements total (2 per round)
     expect(result.statements).toHaveLength(4)
-
-    // Round 2 statements should have lastSeen set to the last statement from round 1
-    const round2Stmts = result.statements.filter(s => s.lastSeen !== undefined)
-    expect(round2Stmts).toHaveLength(2)
-
-    // lastSeen should be the last statement from round 1 (either alice or bob, whichever came last)
-    for (const stmt of round2Stmts) {
-      expect(stmt.lastSeen).toBeDefined()
-      expect(typeof stmt.lastSeen!.playerId).toBe('string')
-      expect(typeof stmt.lastSeen!.content).toBe('string')
-      // lastSeen content should be from round 1
-      expect(['hello', 'world']).toContain(stmt.lastSeen!.content)
-    }
 
     // Round 1 event should have been emitted by engine (carried forward with round 2 requests)
     const gameEvents = events.filter(e => e.source === 'game')

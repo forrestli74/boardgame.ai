@@ -52,7 +52,7 @@ Modular discussion system. Games delegate discussion via `yield*` to a `Discussi
 
 - **`Discussion`** — Interface: `run(gameId, playerIds, contexts, options?)` returns `AsyncGenerator`. Per-player contexts support hidden information.
 - **`BroadcastDiscussion`** — Multi-round parallel broadcast. All players speak or pass each round. Configurable `maxRounds` and `prompt`. Early exit when all pass.
-- **`DiscussionStatement`** — `{ playerId, content, lastSeen? }`. `lastSeen` is logging metadata, not sent to players.
+- **`DiscussionStatement`** — `{ playerId, content }`. Flat ordered list of who said what.
 
 ## Recorder (`src/core/recorder.ts`)
 

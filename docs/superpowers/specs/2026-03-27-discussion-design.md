@@ -10,7 +10,6 @@ Add a modular discussion system to core. Games delegate discussion via `yield*`.
 interface DiscussionStatement {
   playerId: string
   content: string
-  lastSeen?: { playerId: string; content: string }  // last message seen before speaking, for logging/analysis only
 }
 
 interface DiscussionResult {
@@ -34,7 +33,6 @@ interface Discussion {
 - `contexts` — per-player opaque game state, keyed by playerId. Each player sees only their own context. Supports games with hidden information (e.g., Avalon role-specific views).
 - `firstSpeakers` — hint for ordering. Implementation decides how to use it (e.g., put them first in the request array).
 - `DiscussionResult.statements` — flat list, mode-agnostic. Any implementation returns an ordered list of who said what.
-- `lastSeen` — metadata for logging/analysis. Records what the player had seen when they spoke. NOT sent to the player (their view already contains previous statements).
 
 ## BroadcastDiscussion
 
@@ -68,21 +66,15 @@ Each player receives:
   context: unknown,          // per-player game context (e.g., role-specific view)
   round: number,             // current round (0-indexed)
   maxRounds: number,
-  previousStatements: { playerId: string; content: string }[],  // all prior statements (no lastSeen)
+  previousStatements: { playerId: string; content: string }[],  // all prior statements
 }
 ```
 
-`previousStatements` is a flat list of all statements from prior rounds. `lastSeen` is not included — it's internal metadata.
+`previousStatements` is a flat list of all statements from prior rounds.
 
 ### firstSpeakers Behavior
 
 Players in `firstSpeakers` are placed first in the request array for each round. The Engine dispatches them first, which means their statements tend to appear first in the parallel collection. This is a soft ordering hint, not a guarantee.
-
-### lastSeen Behavior
-
-For `BroadcastDiscussion`:
-- Round 1 speakers: `lastSeen` is `undefined` (saw nothing)
-- Round 2+ speakers: `lastSeen` is the last statement from the previous round
 
 ## Integration with Avalon
 
