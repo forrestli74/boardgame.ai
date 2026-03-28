@@ -8,7 +8,6 @@ Add a modular discussion system to core. Games delegate discussion via `yield*`.
 
 ```typescript
 interface DiscussionOptions {
-  gameId: string              // for constructing GameEvents
   firstSpeakers?: string[]    // hint: these players speak first in round ordering
 }
 
@@ -23,6 +22,7 @@ interface DiscussionResult {
 
 interface Discussion {
   run(
+    gameId: string,
     playerIds: string[],
     contexts: Record<string, unknown>,  // per-player context (keyed by playerId)
     options?: DiscussionOptions,
@@ -93,9 +93,10 @@ if (self.discussion) {
     players.map(p => [p.id, buildView(p, state)])
   )
   const result = yield* self.discussion.run(
+    gameId,
     playerIds,
     contexts,
-    { gameId, firstSpeakers: [leader.id] },
+    { firstSpeakers: [leader.id] },
   )
   // Events already emitted by discussion.run() during each round
   // result.rounds available for game logic if needed
