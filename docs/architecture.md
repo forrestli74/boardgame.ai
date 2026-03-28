@@ -66,6 +66,14 @@ LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript
 - **`prompts.ts`** — System prompt and message builders for game master LLM calls.
 - **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
 
+## Avalon (`src/games/avalon/`)
+
+Native Game implementation for The Resistance: Avalon. Deterministic game logic — no LLMs.
+
+- **`types.ts`** — Types, Zod schemas, lookup tables (team counts, quest configs, role configs), `assignRoles()`, `buildView()`
+- **`avalon.ts`** — `Avalon` implements `Game`. Generator-based: team proposal → vote → quest → assassination.
+- **`avalon.test.ts`** — Deterministic tests with `scriptedPlayers` helper.
+
 ## LLM Player (`src/players/llm-player.ts`)
 
 LLM-powered Player implementation. Receives an `ActionRequest` and uses the Vercel AI SDK's `generateText()` with forced tool use to get a structured action from the LLM. Supports optional `persona` string and configurable model via `'provider:model'` string (default: `'google:gemini-2.5-flash'`). Stateless per request.
@@ -89,6 +97,11 @@ src/
 │   └── *.test.ts             # Co-located tests
 │
 ├── games/
+│   ├── avalon/               # Native Avalon implementation
+│   │   ├── types.ts          # Types, schemas, tables, assignRoles, buildView
+│   │   ├── avalon.ts         # Avalon implements Game
+│   │   └── avalon.test.ts    # Deterministic tests
+│   │
 │   └── ai_game/              # LLM-powered Game implementation
 │       ├── ai-game.ts        # AIGame implements Game
 │       ├── prompts.ts        # Prompt builders

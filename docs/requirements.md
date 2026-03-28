@@ -17,20 +17,20 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 - [x] **DATA-03**: Reproducible game configs — seed, players, options validated by game
 - [ ] **DATA-04**: AI-generated post-game summary narrative
 
-### Avalon Rules (Phase 2)
+### Avalon Rules (Phase 2 — Complete)
 
-- [ ] **AVLN-01**: Role assignment for 5–10 players → T-AVALON-ROLES
-- [ ] **AVLN-02**: Team proposal phase → T-AVALON-GAME-FLOW
-- [ ] **AVLN-03**: Team voting phase → T-AVALON-GAME-FLOW
-- [ ] **AVLN-04**: Quest phase → T-AVALON-GAME-FLOW
-- [ ] **AVLN-05**: Game end conditions (3 successes/failures) → T-AVALON-GAME-FLOW
-- [ ] **AVLN-06**: Merlin assassination → T-AVALON-GAME-FLOW
-- [ ] **AVLN-07**: Role-specific visibility → T-AVALON-ROLES
-- [ ] **AVLN-08**: Player view isolation → T-AVALON-ROLES
+- [x] **AVLN-01**: Role assignment for 5–10 players → T-AVALON-ROLES
+- [x] **AVLN-02**: Team proposal phase → T-AVALON-GAME-FLOW
+- [x] **AVLN-03**: Team voting phase → T-AVALON-GAME-FLOW
+- [x] **AVLN-04**: Quest phase → T-AVALON-GAME-FLOW
+- [x] **AVLN-05**: Game end conditions (3 successes/failures) → T-AVALON-GAME-FLOW
+- [x] **AVLN-06**: Merlin assassination → T-AVALON-GAME-FLOW
+- [x] **AVLN-07**: Role-specific visibility → T-AVALON-ROLES
+- [x] **AVLN-08**: Player view isolation → T-AVALON-ROLES
 
-### Randomness (Phase 2)
+### Randomness (Phase 2 — Complete)
 
-- [ ] **RAND-01**: Pre-compute random decisions in TypeScript (seeded PRNG), pass as facts to LLM — LLM must not generate its own randomness
+- [x] **RAND-01**: Pre-compute random decisions in TypeScript (seeded PRNG), pass as facts to LLM — LLM must not generate its own randomness
 
 ### AI Agents (Phase 3)
 
@@ -67,7 +67,7 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 | Phase | Requirements | Status |
 |-------|-------------|--------|
 | 1. Data Model | FRAME-01–03, DATA-01–03 | Complete |
-| 2. Avalon Rules | AVLN-01–08 | Pending |
+| 2. Avalon Rules | AVLN-01–08, RAND-01 | Complete |
 | 3. LLM Agents | AGENT-01–05, DISC-01–02 | Pending |
 | 4. CLI Runner | EXEC-01, DATA-04 | Pending |
 | 5. Batch Mode | EXEC-02–03 | Pending |
