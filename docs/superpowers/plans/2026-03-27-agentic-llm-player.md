@@ -4,80 +4,25 @@
 
 **Goal:** Upgrade LLMPlayer from stateless to agentic — persistent memory, chain-of-thought reasoning, dev visibility via accessors and callback.
 
-**Architecture:** Replace LLMPlayer internals. Wrap the game's `actionSchema` in a larger schema (`{ reasoning, memory, action }`). Extract action to return, store memory and reasoning internally. Constructor signature unchanged.
+**Architecture:** Replace LLMPlayer internals. Wrap the game's `actionSchema` in a larger schema (`{ reasoning, memory, action }`). Extract action to return, store memory and reasoning internally. Constructor signature unchanged. All requests use structured tool call (text mode removed).
 
 **Tech Stack:** TypeScript, Zod, Vitest, Vercel AI SDK
 
 **Spec:** `docs/superpowers/specs/2026-03-27-agentic-llm-player-design.md`
 
+**Impact:** Removing text mode changes LLM request format for AIGame. Cassettes in `src/games/ai_game/__fixtures__/` must be re-recorded after this change.
+
 ---
 
-### Task 1: Rewrite System Prompt and Add Memory State
+### Task 1: Rewrite LLMPlayer — Memory, Reasoning, Wrapped Schema
 
 **Files:**
-- Modify: `src/players/llm-player.ts`
-- Modify: `src/players/llm-player.test.ts`
+- Modify: `src/players/llm-player.ts` (full rewrite of internals)
+- Modify: `src/players/llm-player.test.ts` (update all tests + add new ones)
 
-- [ ] **Step 1: Write failing tests for new system prompt and memory accessors**
+This is one atomic change: new system prompt, wrapped schema, memory persistence, accessors, and updated test mocks — all at once to avoid broken intermediate states.
 
-Add these tests to `src/players/llm-player.test.ts` (keep existing mock setup and helpers):
-
-```typescript
-it('system prompt includes memory instruction', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'thinking...', memory: 'alice is suspicious', action: { position: 1 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  await player.act(makeRequest())
-
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  expect(callArgs.system).toContain('private memory')
-  expect(callArgs.system).toContain('300 words')
-})
-
-it('system prompt includes reasoning instruction', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'thinking...', memory: '', action: { position: 1 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  await player.act(makeRequest())
-
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  expect(callArgs.system).toContain('reasoning is private')
-})
-
-it('system prompt concatenates persona when provided', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'r', memory: 'm', action: { position: 1 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice', { persona: 'Play aggressively.\n\n## Merlin Strategy\nHide your identity.' })
-  await player.act(makeRequest())
-
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  expect(callArgs.system).toContain('Play aggressively')
-  expect(callArgs.system).toContain('Merlin Strategy')
-  expect(callArgs.system).toContain('private memory')
-})
-
-it('getMemory returns empty string initially', () => {
-  const player = new LLMPlayer('p1', 'Alice')
-  expect(player.getMemory()).toBe('')
-})
-
-it('getLastReasoning returns undefined initially', () => {
-  const player = new LLMPlayer('p1', 'Alice')
-  expect(player.getLastReasoning()).toBeUndefined()
-})
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: FAIL — `getMemory` and `getLastReasoning` not defined, system prompt doesn't contain expected text
-
-- [ ] **Step 3: Update LLMPlayer with new system prompt, memory state, and accessors**
-
-Replace the system prompt and `buildSystemPrompt` function, add memory state and accessors in `src/players/llm-player.ts`:
+- [ ] **Step 1: Rewrite `src/players/llm-player.ts`**
 
 ```typescript
 import { generateText, tool } from 'ai'
@@ -113,7 +58,7 @@ export class LLMPlayer implements Player {
   private readonly model: string
   private readonly persona?: string
   private memory = ''
-  private lastReasoning?: string
+  private lastReasoning_?: string
 
   constructor(id: string, name: string, options?: LLMPlayerOptions) {
     this.id = id
@@ -123,14 +68,25 @@ export class LLMPlayer implements Player {
   }
 
   getMemory(): string { return this.memory }
-  getLastReasoning(): string | undefined { return this.lastReasoning }
+  getLastReasoning(): string | undefined { return this.lastReasoning_ }
 
   async act(request: ActionRequest): Promise<unknown> {
     const systemPrompt = buildSystemPrompt(this.persona)
     const view = typeof request.view === 'string' ? request.view : JSON.stringify(request.view, null, 2)
 
-    // For now, keep existing behavior — will be updated in Task 2
-    const userMessage = `Current game state (your view):\n\n${view}\n\nChoose your action.`
+    const parts = ['Current game state (your view):\n\n' + view]
+    if (this.memory) {
+      parts.push('Your memory from previous turns:\n\n' + this.memory)
+    }
+    parts.push('Choose your action.')
+    const userMessage = parts.join('\n\n')
+
+    const wrappedSchema = z.object({
+      reasoning: z.string().describe('Your private reasoning about the current situation'),
+      memory: z.string().describe('Updated memory — keep concise, under 300 words'),
+      action: request.actionSchema as z.ZodTypeAny,
+    })
+
     const result = await generateText({
       model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
       system: systemPrompt,
@@ -138,8 +94,8 @@ export class LLMPlayer implements Player {
       maxOutputTokens: 4096,
       tools: {
         submit_action: tool({
-          description: 'Submit your chosen action for this turn',
-          inputSchema: request.actionSchema,
+          description: 'Submit your reasoning, updated memory, and chosen action',
+          inputSchema: wrappedSchema,
         }),
       },
       toolChoice: { type: 'tool', toolName: 'submit_action' },
@@ -147,197 +103,236 @@ export class LLMPlayer implements Player {
 
     const call = result.toolCalls[0]
     if (!call) throw new Error('LLM returned no tool call')
-    return call.input
+
+    const response = call.input as { reasoning: string; memory: string; action: unknown }
+    this.memory = response.memory
+    this.lastReasoning_ = response.reasoning
+
+    return response.action
   }
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 2: Rewrite `src/players/llm-player.test.ts`**
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { z } from 'zod'
+import type { ActionRequest } from '../core/types.js'
+
+const mockGenerateText = vi.fn()
+
+vi.mock('ai', async () => {
+  const actual = await vi.importActual('ai')
+  return { ...actual, generateText: mockGenerateText }
+})
+
+const { LLMPlayer } = await import('./llm-player.js')
+
+// Helper: mock a wrapped response { reasoning, memory, action }
+function mockResponse(action: unknown, reasoning = 'auto', memory = '') {
+  mockGenerateText.mockResolvedValueOnce({
+    toolCalls: [{ input: { reasoning, memory, action } }],
+  })
+}
+
+function makeRequest(overrides?: Partial<ActionRequest>): ActionRequest {
+  return {
+    playerId: 'p1',
+    view: { board: ['X', '', 'O', '', '', '', '', '', ''], turn: 3 },
+    actionSchema: z.object({
+      position: z.number().int().min(0).max(8).describe('Board position'),
+    }),
+    ...overrides,
+  }
+}
+
+describe('LLMPlayer', () => {
+  beforeEach(() => { mockGenerateText.mockReset() })
+
+  // --- Interface ---
+
+  it('implements Player interface with id and name', () => {
+    const player = new LLMPlayer('p1', 'Alice')
+    expect(player.id).toBe('p1')
+    expect(player.name).toBe('Alice')
+  })
+
+  // --- System Prompt ---
+
+  it('system prompt includes base, memory, and reasoning instructions', async () => {
+    mockResponse({ position: 1 })
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest())
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.system).toContain('board game player')
+    expect(callArgs.system).toContain('private memory')
+    expect(callArgs.system).toContain('300 words')
+    expect(callArgs.system).toContain('reasoning is private')
+  })
+
+  it('concatenates persona into system prompt when provided', async () => {
+    mockResponse({ position: 4 })
+    const player = new LLMPlayer('p1', 'Alice', { persona: 'Play aggressively.\n\n## Merlin Strategy\nHide your identity.' })
+    await player.act(makeRequest())
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.system).toContain('Play aggressively')
+    expect(callArgs.system).toContain('Merlin Strategy')
+    expect(callArgs.system).toContain('private memory')
+  })
+
+  it('omits persona from prompt when not provided', async () => {
+    mockResponse({ position: 4 })
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest())
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.system).not.toContain('aggressively')
+  })
+
+  // --- View Handling ---
+
+  it('passes string views through as-is', async () => {
+    mockResponse({ choice: 'approve' })
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest({
+      view: 'You are on a quest.',
+      actionSchema: z.object({ choice: z.enum(['approve', 'reject']) }),
+    }))
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.messages[0].content).toContain('You are on a quest.')
+  })
+
+  it('JSON-stringifies object views', async () => {
+    mockResponse({ move: 'rock' })
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest({
+      view: { hand: ['rock', 'paper'], score: 5 },
+      actionSchema: z.object({ move: z.enum(['rock', 'paper', 'scissors']) }),
+    }))
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.messages[0].content).toContain('"hand"')
+    expect(callArgs.messages[0].content).toContain('"score"')
+  })
+
+  // --- Wrapped Schema ---
+
+  it('returns only the action from wrapped response', async () => {
+    mockResponse({ position: 7 }, 'my reasoning', 'my memory')
+    const player = new LLMPlayer('p1', 'Alice')
+    const result = await player.act(makeRequest())
+    expect(result).toEqual({ position: 7 })
+  })
+
+  it('uses forced tool choice with wrapped schema', async () => {
+    mockResponse({ team: ['p1', 'p2'] })
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest({
+      actionSchema: z.object({ team: z.array(z.string()) }),
+    }))
+
+    const callArgs = mockGenerateText.mock.calls[0][0]
+    expect(callArgs.toolChoice).toEqual({ type: 'tool', toolName: 'submit_action' })
+    expect(callArgs.tools.submit_action).toBeDefined()
+  })
+
+  // --- Memory ---
+
+  it('getMemory returns empty string initially', () => {
+    const player = new LLMPlayer('p1', 'Alice')
+    expect(player.getMemory()).toBe('')
+  })
+
+  it('stores memory across act() calls', async () => {
+    const player = new LLMPlayer('p1', 'Alice')
+
+    mockResponse({ position: 4 }, 'r1', 'opponent plays corners')
+    await player.act(makeRequest())
+    expect(player.getMemory()).toBe('opponent plays corners')
+
+    mockResponse({ position: 1 }, 'r2', 'opponent plays corners, now center')
+    await player.act(makeRequest())
+    expect(player.getMemory()).toBe('opponent plays corners, now center')
+  })
+
+  it('includes memory in user message on subsequent turns', async () => {
+    const player = new LLMPlayer('p1', 'Alice')
+
+    // First call — no memory
+    mockResponse({ position: 1 }, 'r1', 'note 1')
+    await player.act(makeRequest())
+    expect(mockGenerateText.mock.calls[0][0].messages[0].content).not.toContain('Your memory')
+
+    // Second call — memory included
+    mockResponse({ position: 2 }, 'r2', 'note 2')
+    await player.act(makeRequest())
+    expect(mockGenerateText.mock.calls[1][0].messages[0].content).toContain('Your memory')
+    expect(mockGenerateText.mock.calls[1][0].messages[0].content).toContain('note 1')
+  })
+
+  // --- Reasoning ---
+
+  it('getLastReasoning returns undefined initially', () => {
+    const player = new LLMPlayer('p1', 'Alice')
+    expect(player.getLastReasoning()).toBeUndefined()
+  })
+
+  it('stores lastReasoning after each act()', async () => {
+    mockResponse({ position: 2 }, 'I should block')
+    const player = new LLMPlayer('p1', 'Alice')
+    await player.act(makeRequest())
+    expect(player.getLastReasoning()).toBe('I should block')
+  })
+
+  // --- Errors ---
+
+  it('propagates errors from generateText', async () => {
+    mockGenerateText.mockRejectedValueOnce(new Error('API rate limit exceeded'))
+    const player = new LLMPlayer('p1', 'Alice')
+    await expect(player.act(makeRequest())).rejects.toThrow('API rate limit exceeded')
+  })
+
+  it('throws when LLM returns no tool call', async () => {
+    mockGenerateText.mockResolvedValueOnce({ toolCalls: [] })
+    const player = new LLMPlayer('p1', 'Alice')
+    await expect(player.act(makeRequest())).rejects.toThrow('LLM returned no tool call')
+  })
+})
+```
+
+- [ ] **Step 3: Run tests**
 
 Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: Some new tests pass (prompt tests, accessor tests), but the wrapped schema tests may still fail since `act()` doesn't yet handle `{ reasoning, memory, action }`. That's OK — Task 2 handles the schema wrapping.
+Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add src/players/llm-player.ts src/players/llm-player.test.ts
-git commit -m "feat: add memory state, accessors, and new system prompt to LLMPlayer"
+git commit -m "feat: upgrade LLMPlayer to agentic — memory, reasoning, wrapped schema"
 ```
 
 ---
 
-### Task 2: Wrap Action Schema with Reasoning + Memory
+### Task 2: onThought Callback
 
 **Files:**
 - Modify: `src/players/llm-player.ts`
 - Modify: `src/players/llm-player.test.ts`
 
-- [ ] **Step 1: Write failing tests for schema wrapping and memory persistence**
+- [ ] **Step 1: Add failing tests**
 
 Add to `src/players/llm-player.test.ts`:
 
 ```typescript
-it('wraps actionSchema with reasoning and memory fields', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'I see an opening', memory: 'opponent plays corners', action: { position: 4 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  await player.act(makeRequest())
+// --- onThought Callback ---
 
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  // The tool schema should wrap the original actionSchema
-  const toolSchema = callArgs.tools.submit_action
-  expect(toolSchema).toBeDefined()
-})
-
-it('returns only the action from the wrapped response', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'thinking about it', memory: 'game note', action: { position: 7 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  const result = await player.act(makeRequest())
-
-  // Should return only the action, not reasoning/memory
-  expect(result).toEqual({ position: 7 })
-})
-
-it('stores memory across act() calls', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'first turn', memory: 'opponent opened with corner', action: { position: 4 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  await player.act(makeRequest())
-
-  expect(player.getMemory()).toBe('opponent opened with corner')
-
-  // Second call — memory should be in the user message
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'second turn', memory: 'opponent opened with corner. now taking center', action: { position: 1 } } }],
-  })
-  await player.act(makeRequest())
-
-  expect(player.getMemory()).toBe('opponent opened with corner. now taking center')
-
-  // Verify the second call included memory in the user message
-  const secondCallArgs = mockGenerateText.mock.calls[1][0]
-  expect(secondCallArgs.messages[0].content).toContain('opponent opened with corner')
-})
-
-it('stores lastReasoning after each act()', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'I should block', memory: '', action: { position: 2 } } }],
-  })
-  const player = new LLMPlayer('p1', 'Alice')
-  await player.act(makeRequest())
-
-  expect(player.getLastReasoning()).toBe('I should block')
-})
-
-it('includes memory in user message when memory is not empty', async () => {
-  const player = new LLMPlayer('p1', 'Alice')
-
-  // First call — no memory yet
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'r1', memory: 'note 1', action: { position: 1 } } }],
-  })
-  await player.act(makeRequest())
-
-  const firstCallArgs = mockGenerateText.mock.calls[0][0]
-  expect(firstCallArgs.messages[0].content).not.toContain('Your memory')
-
-  // Second call — memory included
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'r2', memory: 'note 2', action: { position: 2 } } }],
-  })
-  await player.act(makeRequest())
-
-  const secondCallArgs = mockGenerateText.mock.calls[1][0]
-  expect(secondCallArgs.messages[0].content).toContain('Your memory')
-  expect(secondCallArgs.messages[0].content).toContain('note 1')
-})
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: FAIL — act() doesn't wrap schema or extract action yet
-
-- [ ] **Step 3: Update act() to wrap schema and handle response**
-
-Replace the `act()` method in `src/players/llm-player.ts`:
-
-```typescript
-async act(request: ActionRequest): Promise<unknown> {
-  const systemPrompt = buildSystemPrompt(this.persona)
-  const view = typeof request.view === 'string' ? request.view : JSON.stringify(request.view, null, 2)
-
-  const parts = ['Current game state (your view):\n\n' + view]
-  if (this.memory) {
-    parts.push('Your memory from previous turns:\n\n' + this.memory)
-  }
-  parts.push('Choose your action.')
-  const userMessage = parts.join('\n\n')
-
-  const wrappedSchema = z.object({
-    reasoning: z.string().describe('Your private reasoning about the current situation'),
-    memory: z.string().describe('Updated memory — keep concise, under 300 words'),
-    action: request.actionSchema as z.ZodTypeAny,
-  })
-
-  const result = await generateText({
-    model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
-    maxOutputTokens: 4096,
-    tools: {
-      submit_action: tool({
-        description: 'Submit your reasoning, updated memory, and chosen action',
-        inputSchema: wrappedSchema,
-      }),
-    },
-    toolChoice: { type: 'tool', toolName: 'submit_action' },
-  })
-
-  const call = result.toolCalls[0]
-  if (!call) throw new Error('LLM returned no tool call')
-
-  const response = call.input as { reasoning: string; memory: string; action: unknown }
-  this.memory = response.memory
-  this.lastReasoning = response.reasoning
-
-  return response.action
-}
-```
-
-Remove the `isTextMode`, `actText`, and `actStructured` methods — all requests now go through the wrapped schema path.
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/players/llm-player.ts src/players/llm-player.test.ts
-git commit -m "feat: wrap action schema with reasoning + memory, persist across turns"
-```
-
----
-
-### Task 3: onThought Callback
-
-**Files:**
-- Modify: `src/players/llm-player.ts`
-- Modify: `src/players/llm-player.test.ts`
-
-- [ ] **Step 1: Write failing test**
-
-```typescript
-it('calls onThought callback after each act() with reasoning, memory, and action', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'my reasoning', memory: 'my memory', action: { position: 5 } } }],
-  })
+it('calls onThought after each act() with reasoning, memory, and action', async () => {
+  mockResponse({ position: 5 }, 'my reasoning', 'my memory')
   const thoughts: unknown[] = []
   const player = new LLMPlayer('p1', 'Alice')
   player.onThought = (data) => thoughts.push(data)
@@ -353,11 +348,8 @@ it('calls onThought callback after each act() with reasoning, memory, and action
 })
 
 it('does not throw when onThought is not set', async () => {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning: 'r', memory: 'm', action: { position: 1 } } }],
-  })
+  mockResponse({ position: 1 })
   const player = new LLMPlayer('p1', 'Alice')
-  // No onThought set — should not throw
   await expect(player.act(makeRequest())).resolves.toEqual({ position: 1 })
 })
 ```
@@ -365,41 +357,35 @@ it('does not throw when onThought is not set', async () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: FAIL — `onThought` not defined on LLMPlayer
+Expected: FAIL — `onThought` not defined
 
 - [ ] **Step 3: Add onThought to LLMPlayer**
 
-Add to the class in `src/players/llm-player.ts`:
+Add the property to the class:
 
 ```typescript
-export class LLMPlayer implements Player {
-  // ... existing fields ...
-  onThought?: (data: { reasoning: string; memory: string; action: unknown }) => void
-
-  // In act(), after extracting the response:
-  // this.onThought?.({ reasoning: response.reasoning, memory: response.memory, action: response.action })
-}
+onThought?: (data: { reasoning: string; memory: string; action: unknown }) => void
 ```
 
-Add the callback invocation right after storing memory and reasoning in `act()`:
+Add the invocation in `act()`, after storing memory and reasoning, before returning:
 
 ```typescript
 this.memory = response.memory
-this.lastReasoning = response.reasoning
+this.lastReasoning_ = response.reasoning
 this.onThought?.({ reasoning: response.reasoning, memory: response.memory, action: response.action })
 
 return response.action
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Run tests**
 
 Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: PASS
+Expected: ALL PASS
 
-- [ ] **Step 5: Run all tests to verify nothing broke**
+- [ ] **Step 5: Run full suite**
 
 Run: `npx vitest run`
-Expected: ALL PASS
+Expected: ALL PASS (cassette tests may fail — see Task 3)
 
 - [ ] **Step 6: Commit**
 
@@ -410,90 +396,64 @@ git commit -m "feat: add onThought callback for dev visibility into reasoning an
 
 ---
 
-### Task 4: Update Existing Tests
+### Task 3: Re-record AI Game Cassettes
+
+Removing text mode changes the LLM request format for AIGame (now uses wrapped tool schema instead of plain text). Cassettes must be re-recorded.
 
 **Files:**
-- Modify: `src/players/llm-player.test.ts`
+- Modify: `src/games/ai_game/__fixtures__/integration-AI-Game-plays-tic-tac-toe-to-completion.json`
+- Modify: `src/games/ai_game/__fixtures__/integration-AI-Game-Avalon-plays-a-5-player-game-to-completion.json`
 
-Some existing tests mock `generateText` to return `{ toolCalls: [{ input: { position: N } }] }` — the old format without `reasoning` and `memory`. These need updating to return the wrapped format.
-
-- [ ] **Step 1: Update all mockToolCallResponse calls**
-
-Replace the helper:
-
-```typescript
-function mockToolCallResponse(action: unknown, reasoning = 'auto-reasoning', memory = '') {
-  mockGenerateText.mockResolvedValueOnce({
-    toolCalls: [{ input: { reasoning, memory, action } }],
-  })
-}
-```
-
-Update every test that uses `mockToolCallResponse` or directly mocks `mockGenerateText.mockResolvedValueOnce` to use the wrapped format `{ reasoning, memory, action }`.
-
-Tests to update:
-- `calls generateText with system prompt...` — `mockToolCallResponse({ position: 1 })`
-- `passes string views through as-is` — `mockToolCallResponse({ choice: 'approve' })`
-- `JSON-stringifies object views` — `mockToolCallResponse({ move: 'rock' })`
-- `includes persona in system prompt` — `mockToolCallResponse({ position: 4 })`
-- `does not include persona section` — `mockToolCallResponse({ position: 4 })`
-- `uses the action schema as tool parameters` — `mockToolCallResponse({ team: ['p1', 'p2'] })`
-
-Also update the persona test to not check for `'Player persona:'` label (since prompt is now concatenated without labels):
-
-```typescript
-it('includes persona in system prompt when provided', async () => {
-  mockToolCallResponse({ position: 4 })
-  const player = new LLMPlayer('p1', 'Alice', { persona: 'Play aggressively and take risks.' })
-
-  await player.act(makeRequest())
-
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  expect(callArgs.system).toContain('Play aggressively and take risks.')
-})
-
-it('does not include persona when no persona given', async () => {
-  mockToolCallResponse({ position: 4 })
-  const player = new LLMPlayer('p1', 'Alice')
-
-  await player.act(makeRequest())
-
-  const callArgs = mockGenerateText.mock.calls[0][0]
-  expect(callArgs.system).not.toContain('Play aggressively')
-})
-```
-
-Update the `returns only the action` assertion test:
-
-```typescript
-it('returns extracted action from wrapped response', async () => {
-  mockToolCallResponse({ position: 1 })
-  const player = new LLMPlayer('p1', 'Alice')
-  const result = await player.act(makeRequest())
-  expect(result).toEqual({ position: 1 })
-})
-```
-
-- [ ] **Step 2: Run all tests**
-
-Run: `npx vitest run src/players/llm-player.test.ts`
-Expected: ALL PASS
-
-- [ ] **Step 3: Run full test suite**
-
-Run: `npx vitest run`
-Expected: ALL PASS
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 1: Delete old cassettes**
 
 ```bash
-git add src/players/llm-player.test.ts
-git commit -m "test: update LLMPlayer tests for wrapped schema format"
+rm -f src/games/ai_game/__fixtures__/integration-AI-Game-plays-tic-tac-toe-to-completion.json
+rm -f src/games/ai_game/__fixtures__/integration-AI-Game-Avalon-plays-a-5-player-game-to-completion.json
+```
+
+- [ ] **Step 2: Re-record tic-tac-toe cassette**
+
+```bash
+VCR_MODE=record npx vitest run src/games/ai_game/integration.test.ts
+```
+
+- [ ] **Step 3: Verify tic-tac-toe cassette replays**
+
+```bash
+npx vitest run src/games/ai_game/integration.test.ts
+```
+
+- [ ] **Step 4: Re-record Avalon cassette**
+
+```bash
+VCR_MODE=record npx vitest run src/games/ai_game/avalon-integration.test.ts
+```
+
+This takes ~5-10 minutes (LLM API calls).
+
+- [ ] **Step 5: Verify Avalon cassette replays**
+
+```bash
+npx vitest run src/games/ai_game/avalon-integration.test.ts
+```
+
+- [ ] **Step 6: Run full suite**
+
+```bash
+npx vitest run
+```
+Expected: ALL PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/games/ai_game/__fixtures__/
+git commit -m "fix: re-record AI game cassettes for wrapped LLM schema"
 ```
 
 ---
 
-### Task 5: Update Docs
+### Task 4: Update Docs
 
 **Files:**
 - Modify: `docs/architecture.md`
@@ -501,7 +461,7 @@ git commit -m "test: update LLMPlayer tests for wrapped schema format"
 
 - [ ] **Step 1: Update architecture.md LLM Player section**
 
-Find the existing `## LLM Player` section and replace:
+Replace the existing `## LLM Player` section with:
 
 ```markdown
 ## LLM Player (`src/players/llm-player.ts`)
@@ -517,9 +477,9 @@ LLM-powered Player implementation with persistent memory and chain-of-thought re
 
 - [ ] **Step 2: Update requirements.md — mark AGENT items complete**
 
-Mark as complete:
+Change from `- [ ]` to `- [x]`:
 - `AGENT-02`: Configurable persona/strategy
-- `AGENT-03`: Role-specific prompt components (via persona)
+- `AGENT-03`: Role-specific prompt components
 - `AGENT-05`: Per-decision reasoning trace
 
 - [ ] **Step 3: Run all tests**
