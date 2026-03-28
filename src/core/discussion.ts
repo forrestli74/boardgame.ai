@@ -36,8 +36,14 @@ function event(gameId: string, data: unknown): GameEvent {
   return { source: 'game', gameId, data, timestamp: new Date().toISOString() }
 }
 
+const DEFAULT_PROMPT = `Share your thoughts with the group. Keep it short and direct. Address specific players when you have something to say to them. Reply with an empty message to pass.`
+
 export class BroadcastDiscussion implements Discussion {
-  constructor(private readonly maxRounds: number = 3) {}
+  private readonly prompt: string
+
+  constructor(private readonly maxRounds: number = 3, prompt?: string) {
+    this.prompt = prompt ?? DEFAULT_PROMPT
+  }
 
   async *run(
     gameId: string,
@@ -72,8 +78,8 @@ export class BroadcastDiscussion implements Discussion {
         playerId: id,
         view: {
           context: contexts[id],
+          prompt: this.prompt,
           round,
-          maxRounds: this.maxRounds,
           previousStatements: [...previousStatements],
         },
         actionSchema: DiscussionStatementSchema,
