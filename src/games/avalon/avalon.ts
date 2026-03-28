@@ -1,6 +1,7 @@
 import type { Game, GameFlow, PlayerAction } from '../../core/game.js'
 import type { GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
 import type { GameEvent } from '../../core/events.js'
+import type { Discussion } from '../../core/discussion.js'
 import {
   type AvalonPlayer, type AvalonState,
   AvalonOptionsSchema, TeamProposalSchema, TeamVoteSchema, QuestVoteSchema, AssassinationTargetSchema,
@@ -13,6 +14,8 @@ function event(gameId: string, data: unknown): GameEvent {
 
 export class Avalon implements Game {
   readonly optionsSchema = AvalonOptionsSchema
+
+  constructor(private discussion?: Discussion) {}
 
   play(config: GameConfig): GameFlow {
     const self = this
@@ -48,6 +51,21 @@ export class Avalon implements Game {
           state.phase = 'team-proposal'
           state.proposedTeam = undefined
           const leader = players[state.leaderIndex]
+
+          // --- Discussion phase (if configured) ---
+          if (self.discussion) {
+            const contexts = Object.fromEntries(
+              players.map(p => [p.id, buildView(p, state)])
+            )
+            const result = yield* self.discussion.run(
+              gameId,
+              playerIds,
+              contexts,
+              { firstSpeakers: [leader.id] },
+            )
+            // Carry discussion's pending events forward
+            pendingEvents.push(...result.pendingEvents)
+          }
 
           // Yield team-proposal request, carrying forward any pending events
           const proposalAction: PlayerAction = yield {

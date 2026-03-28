@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Engine } from '../../core/engine.js'
 import { scriptedPlayers } from '../../test-utils/scripted-players.js'
 import { Avalon } from './avalon.js'
+import { BroadcastDiscussion } from '../../core/discussion.js'
 
 // seed=42, 5 players: alice=merlin(good), bob=assassin(evil), charlie=loyal-servant(good),
 //                      diana=percival(good), eve=morgana(evil), leaderIndex=2 (charlie)
@@ -293,6 +294,74 @@ describe('Avalon', () => {
     expect(outcome?.scores['diana']).toBe(0)
     expect(outcome?.scores['eve']).toBe(0)
     expect(outcome?.scores['grace']).toBe(0)
+  })
+
+  it('good wins with discussion rounds before each proposal', async () => {
+    // seed=42, 5p: alice=merlin(good), bob=assassin(evil), charlie=loyal-servant(good),
+    //              diana=percival(good), eve=morgana(evil), leaderIndex=2 (charlie)
+    // BroadcastDiscussion(1): 1 round of discussion per proposal
+    // 3 successful quests (good-only teams) + assassination miss → good wins
+    const config = makeConfig(5)
+    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
+
+    // Discussion: leader speaks first, then remaining players in order
+    // With firstSpeakers=[leader], order is: leader, then rest
+    // For each proposal, 5 players submit statements, then leader proposes team, then all vote
+    function discussionStatements(leader: string): [string, unknown][] {
+      const order = [leader, ...players5.filter(id => id !== leader)]
+      return order.map(id => [id, { statement: `I am ${id}` }] as [string, unknown])
+    }
+
+    const actions: [string, unknown][] = [
+      // Quest 0: leader=charlie, team size 2
+      ...discussionStatements('charlie'),
+      ['charlie', { team: ['alice', 'charlie'] }],
+      ...allApprove(players5),
+      ['alice', { success: true }],
+      ['charlie', { success: true }],
+      // Quest 1: leader=diana, team size 3
+      ...discussionStatements('diana'),
+      ['diana', { team: ['alice', 'charlie', 'diana'] }],
+      ...allApprove(players5),
+      ['alice', { success: true }],
+      ['charlie', { success: true }],
+      ['diana', { success: true }],
+      // Quest 2: leader=eve, team size 2
+      ...discussionStatements('eve'),
+      ['eve', { team: ['alice', 'charlie'] }],
+      ...allApprove(players5),
+      ['alice', { success: true }],
+      ['charlie', { success: true }],
+      // Assassination: bob picks charlie (not alice/merlin) → good wins
+      ['bob', { targetId: 'charlie' }],
+    ]
+
+    const engine = new Engine()
+    const emittedEvents: unknown[] = []
+    engine.onEvent(e => emittedEvents.push(e))
+
+    const outcome = await engine.run(new Avalon(new BroadcastDiscussion(1)), scriptedPlayers(actions), config)
+
+    const allEvents = collectAllEvents(emittedEvents, outcome as any)
+    const gameEndEvent = findGameEnd(allEvents)
+
+    // Verify discussion-round events were emitted
+    const discussionEvents = allEvents.filter(
+      (e: any) => e.source === 'game' && (e.data as any).type === 'discussion-round'
+    )
+    // 3 quests × 1 discussion round each = 3 discussion-round events
+    expect(discussionEvents.length).toBe(3)
+
+    // Verify game completed correctly
+    expect(gameEndEvent).toBeDefined()
+    expect(gameEndEvent.data.reason).toBe('three-successes')
+    expect(gameEndEvent.data.winner).toBe('good')
+
+    expect(outcome?.scores['alice']).toBe(1)
+    expect(outcome?.scores['charlie']).toBe(1)
+    expect(outcome?.scores['diana']).toBe(1)
+    expect(outcome?.scores['bob']).toBe(0)
+    expect(outcome?.scores['eve']).toBe(0)
   })
 
   it('rotates leader after team rejection', async () => {
