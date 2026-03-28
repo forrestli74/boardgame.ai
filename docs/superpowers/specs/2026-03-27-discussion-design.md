@@ -7,17 +7,18 @@ Add a modular discussion system to core. Games delegate discussion via `yield*`.
 ## Interface (`src/core/discussion.ts`)
 
 ```typescript
-interface DiscussionOptions {
-  firstSpeakers?: string[]    // hint: these players speak first in round ordering
-}
-
 interface DiscussionStatement {
   playerId: string
   content: string
+  lastSeen?: { playerId: string; content: string }  // last message seen before speaking, for logging/analysis only
 }
 
 interface DiscussionResult {
-  rounds: DiscussionStatement[][]  // statements grouped by round
+  statements: DiscussionStatement[]  // flat ordered list, mode-agnostic
+}
+
+interface DiscussionOptions {
+  firstSpeakers?: string[]    // hint: these players speak first in round ordering
 }
 
 interface Discussion {
@@ -32,7 +33,8 @@ interface Discussion {
 
 - `contexts` — per-player opaque game state, keyed by playerId. Each player sees only their own context. Supports games with hidden information (e.g., Avalon role-specific views).
 - `firstSpeakers` — hint for ordering. Implementation decides how to use it (e.g., put them first in the request array).
-- `DiscussionResult.rounds` — grouped by round for logging/analysis. Games can flatten if they don't care.
+- `DiscussionResult.statements` — flat list, mode-agnostic. Any implementation returns an ordered list of who said what.
+- `lastSeen` — metadata for logging/analysis. Records what the player had seen when they spoke. NOT sent to the player (their view already contains previous statements).
 
 ## BroadcastDiscussion
 
@@ -52,7 +54,7 @@ class BroadcastDiscussion implements Discussion {
 
 ```typescript
 const DiscussionStatementSchema = z.object({
-  statement: z.string(),  // empty string = pass (round 2+)
+  statement: z.string(),  // empty string = pass
 })
 ```
 
@@ -66,13 +68,21 @@ Each player receives:
   context: unknown,          // per-player game context (e.g., role-specific view)
   round: number,             // current round (0-indexed)
   maxRounds: number,
-  previousRounds: DiscussionStatement[][],  // all prior rounds
+  previousStatements: { playerId: string; content: string }[],  // all prior statements (no lastSeen)
 }
 ```
+
+`previousStatements` is a flat list of all statements from prior rounds. `lastSeen` is not included — it's internal metadata.
 
 ### firstSpeakers Behavior
 
 Players in `firstSpeakers` are placed first in the request array for each round. The Engine dispatches them first, which means their statements tend to appear first in the parallel collection. This is a soft ordering hint, not a guarantee.
+
+### lastSeen Behavior
+
+For `BroadcastDiscussion`:
+- Round 1 speakers: `lastSeen` is `undefined` (saw nothing)
+- Round 2+ speakers: `lastSeen` is the last statement from the previous round
 
 ## Integration with Avalon
 
@@ -84,7 +94,7 @@ class Avalon implements Game {
 }
 ```
 
-In the game flow, before each team vote:
+In the game flow, before each team proposal:
 
 ```typescript
 // Discussion phase (if configured)
@@ -99,10 +109,10 @@ if (self.discussion) {
     { firstSpeakers: [leader.id] },
   )
   // Events already emitted by discussion.run() during each round
-  // result.rounds available for game logic if needed
+  // result.statements available for game logic if needed
 }
 
-// Then proceed to team vote...
+// Then proceed to team proposal...
 ```
 
 Discussion is optional — Avalon works without it (current behavior). This is a non-breaking change.
