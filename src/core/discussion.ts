@@ -104,12 +104,11 @@ export class BroadcastDiscussion implements Discussion {
         })
       }
 
-      // Process statements: empty string = pass (player drops out)
-      const passedPlayers: string[] = []
+      // Process statements: empty string = pass (but player stays active)
+      let allPassed = true
       for (const s of roundStatements) {
-        if (s.content === '') {
-          passedPlayers.push(s.playerId)
-        } else {
+        if (s.content !== '') {
+          allPassed = false
           allStatements.push({ playerId: s.playerId, content: s.content, lastSeen })
           previousStatements.push({ playerId: s.playerId, content: s.content })
         }
@@ -124,8 +123,8 @@ export class BroadcastDiscussion implements Discussion {
         }),
       ]
 
-      activePlayers = activePlayers.filter(id => !passedPlayers.includes(id))
-      if (activePlayers.length === 0) break
+      // Early exit: all players passed this round
+      if (allPassed) break
     }
 
     // Return result; pendingEvents from the final round are included for the parent to handle

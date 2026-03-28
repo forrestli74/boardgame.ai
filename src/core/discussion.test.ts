@@ -148,34 +148,35 @@ describe('BroadcastDiscussion', () => {
     expect((round2Event.data as any).round).toBe(1)
   })
 
-  it('passing drops player from subsequent rounds', async () => {
+  it('passing does not drop player — they can speak in later rounds', async () => {
     const discussion = new BroadcastDiscussion(3)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
     const engine = new Engine()
 
-    // Bob passes round 1 (empty string), alice speaks all 3 rounds
+    // Bob passes round 1, speaks round 2, passes round 3
     const players = scriptedPlayers([
       // Round 1
       ['alice', { statement: 'round 1 alice' }],
       ['bob', { statement: '' }],
-      // Round 2 — only alice
+      // Round 2 — both asked, bob speaks now
       ['alice', { statement: 'round 2 alice' }],
-      // Round 3 — only alice
+      ['bob', { statement: 'round 2 bob' }],
+      // Round 3 — both asked again
       ['alice', { statement: 'round 3 alice' }],
+      ['bob', { statement: '' }],
     ])
 
     const outcome = await engine.run(game, players, makeConfig(playerIds))
     expect(outcome).not.toBeNull()
 
     const result = outcome!.metadata!.discussion as DiscussionResult
-    // Only alice's statements appear (bob passed and was dropped)
-    expect(result.statements).toHaveLength(3)
-    expect(result.statements.every(s => s.playerId === 'alice')).toBe(true)
-    expect(result.statements.map(s => s.content)).toEqual([
-      'round 1 alice',
-      'round 2 alice',
-      'round 3 alice',
+    expect(result.statements).toHaveLength(4)
+    expect(result.statements.map(s => `${s.playerId}: ${s.content}`)).toEqual([
+      'alice: round 1 alice',
+      'alice: round 2 alice',
+      'bob: round 2 bob',
+      'alice: round 3 alice',
     ])
   })
 
