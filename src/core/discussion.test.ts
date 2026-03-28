@@ -148,6 +148,83 @@ describe('BroadcastDiscussion', () => {
     expect((round2Event.data as any).round).toBe(1)
   })
 
+  it('passing drops player from subsequent rounds', async () => {
+    const discussion = new BroadcastDiscussion(3)
+    const playerIds = ['alice', 'bob']
+    const game = discussionGame(discussion, playerIds)
+    const engine = new Engine()
+
+    // Bob passes round 1 (empty string), alice speaks all 3 rounds
+    const players = scriptedPlayers([
+      // Round 1
+      ['alice', { statement: 'round 1 alice' }],
+      ['bob', { statement: '' }],
+      // Round 2 — only alice
+      ['alice', { statement: 'round 2 alice' }],
+      // Round 3 — only alice
+      ['alice', { statement: 'round 3 alice' }],
+    ])
+
+    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    expect(outcome).not.toBeNull()
+
+    const result = outcome!.metadata!.discussion as DiscussionResult
+    // Only alice's statements appear (bob passed and was dropped)
+    expect(result.statements).toHaveLength(3)
+    expect(result.statements.every(s => s.playerId === 'alice')).toBe(true)
+    expect(result.statements.map(s => s.content)).toEqual([
+      'round 1 alice',
+      'round 2 alice',
+      'round 3 alice',
+    ])
+  })
+
+  it('early exit when all pass — discussion ends after round where everyone passes', async () => {
+    const discussion = new BroadcastDiscussion(5)
+    const playerIds = ['alice', 'bob']
+    const game = discussionGame(discussion, playerIds)
+    const engine = new Engine()
+
+    // Both speak round 1, both pass round 2
+    const players = scriptedPlayers([
+      // Round 1
+      ['alice', { statement: 'hello' }],
+      ['bob', { statement: 'world' }],
+      // Round 2 — both pass
+      ['alice', { statement: '' }],
+      ['bob', { statement: '' }],
+    ])
+
+    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    expect(outcome).not.toBeNull()
+
+    const result = outcome!.metadata!.discussion as DiscussionResult
+    // Only round 1 statements; discussion ended after round 2 (all passed)
+    expect(result.statements).toHaveLength(2)
+    expect(result.statements.map(s => s.content)).toEqual(
+      expect.arrayContaining(['hello', 'world']),
+    )
+  })
+
+  it('all pass round 1 — discussion ends with 0 statements', async () => {
+    const discussion = new BroadcastDiscussion(3)
+    const playerIds = ['alice', 'bob']
+    const game = discussionGame(discussion, playerIds)
+    const engine = new Engine()
+
+    // Both pass immediately in round 1
+    const players = scriptedPlayers([
+      ['alice', { statement: '' }],
+      ['bob', { statement: '' }],
+    ])
+
+    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    expect(outcome).not.toBeNull()
+
+    const result = outcome!.metadata!.discussion as DiscussionResult
+    expect(result.statements).toHaveLength(0)
+  })
+
   it('firstSpeakers option orders requests with specified players first', async () => {
     const discussion = new BroadcastDiscussion(1)
     const playerIds = ['alice', 'bob', 'charlie']
