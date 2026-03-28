@@ -25,7 +25,11 @@ Each turn produces private reasoning before the action. The reasoning is:
 
 ### Role Strategy Document
 
-A single markdown document covering strategy for all roles. Included as part of the `persona` string — no new option needed. The caller concatenates persona + strategy into one string.
+Included as part of the `persona` string — no new option needed. The caller concatenates persona + strategy into one string.
+
+### Game Rules
+
+Not an LLM player concern. The game includes rules text in the `view` if desired. The LLM player sees whatever the game puts in the view.
 
 ### LLM Call Structure
 
