@@ -10,7 +10,6 @@ interface PendingResponse {
 }
 
 export class Engine {
-  private maxRetries = 3
   private listeners: ((event: GameEvent) => void)[] = []
 
   onEvent(listener: (event: GameEvent) => void): void {
@@ -46,35 +45,17 @@ export class Engine {
       const response = await Promise.race(pending.values())
       pending.delete(response.playerId)
 
-      const parsed = await this.validateWithRetry(
-        response.action, response.request, players.get(response.playerId)!
-      )
-
       this.emit({
         source: 'player',
         gameId: config.gameId,
         playerId: response.playerId,
-        data: parsed,
+        data: response.action,
         timestamp: new Date().toISOString(),
       })
 
-      result = await gen.next({ playerId: response.playerId, action: parsed })
+      result = await gen.next({ playerId: response.playerId, action: response.action })
     }
 
     return result.value
-  }
-
-  private async validateWithRetry(
-    action: unknown, request: ActionRequest, player: Player
-  ): Promise<unknown> {
-    let current = action
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      const result = request.actionSchema.safeParse(current)
-      if (result.success) return result.data
-      if (attempt < this.maxRetries) {
-        current = await player.act(request)
-      }
-    }
-    return null
   }
 }

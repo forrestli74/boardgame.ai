@@ -74,67 +74,18 @@ describe('Engine', () => {
     expect(actSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('validates player response with actionSchema.safeParse()', async () => {
-    const strictSchema = z.object({ move: z.string() })
+  it('passes raw action to game without validation', async () => {
     const player: Player = {
       id: 'p1', name: 'Alice',
-      act: vi.fn().mockResolvedValue({ move: 'go' }),
+      act: vi.fn().mockResolvedValue({ anything: 'goes' }),
     }
-
-    const game: Game = {
-      optionsSchema: z.object({}),
-      async *play() {
-        const { action } = yield {
-          requests: [{ playerId: 'p1', view: {}, actionSchema: strictSchema }],
-          events: [],
-        }
-        expect(action).toEqual({ move: 'go' })
-        return { scores: {} }
-      },
-    }
-
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
-  })
-
-  it('retries on schema validation failure', async () => {
-    let attempts = 0
-    const player: Player = {
-      id: 'p1', name: 'Alice',
-      act: vi.fn().mockImplementation(async () => {
-        attempts++
-        if (attempts < 3) return { invalid: true }
-        return { move: 'go' }
-      }),
-    }
-    const schema = z.object({ move: z.string() })
-
-    const game: Game = {
-      optionsSchema: z.object({}),
-      async *play() {
-        yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
-        return { scores: {} }
-      },
-    }
-
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
-    expect(attempts).toBeGreaterThanOrEqual(3)
-  })
-
-  it('passes null action to generator on max retries exceeded', async () => {
-    const player: Player = {
-      id: 'p1', name: 'Alice',
-      act: vi.fn().mockResolvedValue({ invalid: true }),
-    }
-    const schema = z.object({ move: z.string() })
     let receivedAction: unknown
 
     const game: Game = {
       optionsSchema: z.object({}),
       async *play() {
         const { action } = yield {
-          requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
+          requests: [makeRequest('p1')],
           events: [],
         }
         receivedAction = action
@@ -144,7 +95,7 @@ describe('Engine', () => {
 
     const engine = new Engine()
     await engine.run(game, new Map([['p1', player]]), makeConfig())
-    expect(receivedAction).toBeNull()
+    expect(receivedAction).toEqual({ anything: 'goes' })
   })
 
   it('emits player event for each response', async () => {
