@@ -8,7 +8,8 @@ Add a modular discussion system to core. Games delegate discussion via `yield*`.
 
 ```typescript
 interface DiscussionOptions {
-  firstSpeakers?: string[]  // hint: these players speak first in round ordering
+  gameId: string              // for constructing GameEvents
+  firstSpeakers?: string[]    // hint: these players speak first in round ordering
 }
 
 interface DiscussionStatement {
@@ -94,12 +95,10 @@ if (self.discussion) {
   const result = yield* self.discussion.run(
     playerIds,
     contexts,
-    { firstSpeakers: [leader.id] },
+    { gameId, firstSpeakers: [leader.id] },
   )
-  // Emit discussion events
-  for (const round of result.rounds) {
-    pendingEvents.push(event(gameId, { type: 'discussion-round', statements: round }))
-  }
+  // Events already emitted by discussion.run() during each round
+  // result.rounds available for game logic if needed
 }
 
 // Then proceed to team vote...
@@ -109,7 +108,7 @@ Discussion is optional — Avalon works without it (current behavior). This is a
 
 ## Events
 
-- `discussion-round` — emitted per round, contains `DiscussionStatement[]`
+Events are emitted as the discussion happens — each round's statements are yielded as a `GameEvent` immediately after collection, not batched at the end. This means the `run()` generator yields `{ requests: [...], events: [roundEvent] }` as part of its flow. The calling game does not need to emit discussion events separately.
 
 ## Files
 
