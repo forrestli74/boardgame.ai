@@ -74,11 +74,15 @@ export class Avalon implements Game {
           }
           pendingEvents = []
 
-          const proposal = proposalAction.action as { team: string[] }
-          state.proposedTeam = proposal.team
+          let proposalParsed = TeamProposalSchema.safeParse(proposalAction.action)
+          if (!proposalParsed.success) {
+            pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: leader.id, raw: proposalAction.action }))
+            proposalParsed = { success: true, data: { team: playerIds.slice(0, questConfigs[state.questNumber].teamSize) } } as any
+          }
+          state.proposedTeam = proposalParsed.data!.team
 
           const proposalEvent = event(gameId, {
-            type: 'team-proposed', leader: leader.id, team: proposal.team, questNumber: state.questNumber,
+            type: 'team-proposed', leader: leader.id, team: state.proposedTeam, questNumber: state.questNumber,
           })
 
           // --- Team Vote (parallel) ---
@@ -92,11 +96,21 @@ export class Avalon implements Game {
             requests: voteRequests,
             events: [proposalEvent],
           }
-          votes[firstVote.playerId] = (firstVote.action as { approve: boolean }).approve
+          let firstVoteParsed = TeamVoteSchema.safeParse(firstVote.action)
+          if (!firstVoteParsed.success) {
+            pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: firstVote.playerId, raw: firstVote.action }))
+            firstVoteParsed = { success: true, data: { approve: false } } as any
+          }
+          votes[firstVote.playerId] = firstVoteParsed.data!.approve
 
           while (Object.keys(votes).length < playerCount) {
             const nextVote: PlayerAction = yield { requests: [], events: [] }
-            votes[nextVote.playerId] = (nextVote.action as { approve: boolean }).approve
+            let nextVoteParsed = TeamVoteSchema.safeParse(nextVote.action)
+            if (!nextVoteParsed.success) {
+              pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: nextVote.playerId, raw: nextVote.action }))
+              nextVoteParsed = { success: true, data: { approve: false } } as any
+            }
+            votes[nextVote.playerId] = nextVoteParsed.data!.approve
           }
 
           const approvals = Object.values(votes).filter(v => v === true).length
@@ -142,11 +156,21 @@ export class Avalon implements Game {
           events: pendingEvents,
         }
         pendingEvents = []
-        questVotes[firstQuest.playerId] = (firstQuest.action as { success: boolean }).success
+        let firstQuestParsed = QuestVoteSchema.safeParse(firstQuest.action)
+        if (!firstQuestParsed.success) {
+          pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: firstQuest.playerId, raw: firstQuest.action }))
+          firstQuestParsed = { success: true, data: { success: true } } as any
+        }
+        questVotes[firstQuest.playerId] = firstQuestParsed.data!.success
 
         while (Object.keys(questVotes).length < team.length) {
           const nextQuest: PlayerAction = yield { requests: [], events: [] }
-          questVotes[nextQuest.playerId] = (nextQuest.action as { success: boolean }).success
+          let nextQuestParsed = QuestVoteSchema.safeParse(nextQuest.action)
+          if (!nextQuestParsed.success) {
+            pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: nextQuest.playerId, raw: nextQuest.action }))
+            nextQuestParsed = { success: true, data: { success: true } } as any
+          }
+          questVotes[nextQuest.playerId] = nextQuestParsed.data!.success
         }
 
         const failCount = Object.values(questVotes).filter(v => v === false).length
@@ -185,7 +209,12 @@ export class Avalon implements Game {
       }
       pendingEvents = []
 
-      const targetId = (assassinAction.action as { targetId: string }).targetId
+      let targetParsed = AssassinationTargetSchema.safeParse(assassinAction.action)
+      if (!targetParsed.success) {
+        pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: assassin.id, raw: assassinAction.action }))
+        targetParsed = { success: true, data: { targetId: playerIds[0] } } as any
+      }
+      const targetId = targetParsed.data!.targetId
       const merlin = players.find(p => p.role === 'merlin')!
       const assassinationSuccess = targetId === merlin.id
       const winner = assassinationSuccess ? 'evil' : 'good'
