@@ -166,4 +166,28 @@ describe('LLMPlayer', () => {
     const player = new LLMPlayer('p1', 'Alice')
     await expect(player.act(makeRequest())).rejects.toThrow('LLM returned no tool call')
   })
+
+  it('calls onThought after each act()', async () => {
+    const onThought = vi.fn()
+    mockResponse({ position: 5 }, 'my reasoning', 'my memory')
+    const player = new LLMPlayer('p1', 'Alice')
+    player.onThought = onThought
+
+    await player.act(makeRequest())
+
+    expect(onThought).toHaveBeenCalledOnce()
+    expect(onThought).toHaveBeenCalledWith({
+      reasoning: 'my reasoning',
+      memory: 'my memory',
+      action: { position: 5 },
+    })
+  })
+
+  it('does not throw when onThought is not set', async () => {
+    mockResponse({ position: 3 }, 'reasoning', 'memory')
+    const player = new LLMPlayer('p1', 'Alice')
+    // onThought is not set
+
+    await expect(player.act(makeRequest())).resolves.toEqual({ position: 3 })
+  })
 })

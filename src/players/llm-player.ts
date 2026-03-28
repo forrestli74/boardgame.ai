@@ -32,6 +32,7 @@ export class LLMPlayer implements Player {
   private readonly persona?: string
   private memory = ''
   private lastReasoning_?: string
+  onThought?: (data: { reasoning: string; memory: string; action: unknown }) => void
 
   constructor(id: string, name: string, options?: LLMPlayerOptions) {
     this.id = id
@@ -80,6 +81,7 @@ export class LLMPlayer implements Player {
     const response = call.input as { reasoning: string; memory: string; action: unknown }
     this.memory = response.memory
     this.lastReasoning_ = response.reasoning
+    this.onThought?.({ reasoning: response.reasoning, memory: response.memory, action: response.action })
 
     return response.action
   }
