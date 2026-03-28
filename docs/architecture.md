@@ -46,6 +46,14 @@ Agent. Single method: `act(request) → Promise<unknown>`.
 
 Receives `ActionRequest` with `playerId`, `view` (game-specific, opaque), and `actionSchema` (Zod).
 
+## Discussion (`src/core/discussion.ts`)
+
+Modular discussion system. Games delegate discussion via `yield*` to a `Discussion` implementation. Events emitted per round during discussion.
+
+- **`Discussion`** — Interface: `run(gameId, playerIds, contexts, options?)` returns `AsyncGenerator`. Per-player contexts support hidden information.
+- **`BroadcastDiscussion`** — Multi-round parallel broadcast. All players speak or pass each round. Configurable `maxRounds` and `prompt`. Early exit when all pass.
+- **`DiscussionStatement`** — `{ playerId, content, lastSeen? }`. `lastSeen` is logging metadata, not sent to players.
+
 ## Recorder (`src/core/recorder.ts`)
 
 JSONL writer backed by Pino. Sync mode for predictable ordering.

@@ -40,10 +40,10 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 - [ ] **AGENT-04**: Structured output validation with retry → T-LLM-PLAYER
 - [ ] **AGENT-05**: Per-decision reasoning trace → T-LLM-PLAYER
 
-### Discussion (Phase 3)
+### Discussion (Phase 3 — Complete)
 
-- [ ] **DISC-01**: One statement per player per round → T-DISCUSSION
-- [ ] **DISC-02**: Statements visible to all, captured in log → T-DISCUSSION
+- [x] **DISC-01**: One statement per player per round → T-DISCUSSION
+- [x] **DISC-02**: Statements visible to all, captured in log → T-DISCUSSION
 
 ### Execution (Phase 4–5)
 
