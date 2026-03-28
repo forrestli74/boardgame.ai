@@ -29,14 +29,14 @@ export interface Discussion {
 }
 
 export const DiscussionStatementSchema = z.object({
-  statement: z.string(),
+  statement: z.string().describe('Your statement to the group, or empty string to pass'),
 })
 
 function event(gameId: string, data: unknown): GameEvent {
   return { source: 'game', gameId, data, timestamp: new Date().toISOString() }
 }
 
-const DEFAULT_PROMPT = `Share your thoughts with the group. Keep it short and direct. Address specific players when you have something to say to them. Reply with an empty message to pass.`
+const DEFAULT_PROMPT = `Share your thoughts with the group. Keep it short and direct. Address specific players when you have something to say to them.`
 
 export class BroadcastDiscussion implements Discussion {
   private readonly prompt: string
