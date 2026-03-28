@@ -91,17 +91,21 @@ export class BroadcastDiscussion implements Discussion {
 
       const firstAction: PlayerAction = yield { requests, events: pendingEvents }
       pendingEvents = []
-      roundStatements.push({
-        playerId: firstAction.playerId,
-        content: (firstAction.action as { statement: string }).statement,
-      })
+      let firstParsed = DiscussionStatementSchema.safeParse(firstAction.action)
+      if (!firstParsed.success) {
+        pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: firstAction.playerId, raw: firstAction.action }))
+        firstParsed = { success: true, data: { statement: '' } } as any
+      }
+      roundStatements.push({ playerId: firstAction.playerId, content: firstParsed.data!.statement })
 
       while (roundStatements.length < activePlayers.length) {
         const action: PlayerAction = yield { requests: [], events: [] }
-        roundStatements.push({
-          playerId: action.playerId,
-          content: (action.action as { statement: string }).statement,
-        })
+        let parsed = DiscussionStatementSchema.safeParse(action.action)
+        if (!parsed.success) {
+          pendingEvents.push(event(gameId, { type: 'validation-failed', playerId: action.playerId, raw: action.action }))
+          parsed = { success: true, data: { statement: '' } } as any
+        }
+        roundStatements.push({ playerId: action.playerId, content: parsed.data!.statement })
       }
 
       // Process statements: empty string = pass (but player stays active)

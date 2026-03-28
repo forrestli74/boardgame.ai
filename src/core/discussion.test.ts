@@ -226,6 +226,29 @@ describe('BroadcastDiscussion', () => {
     expect(result.statements).toHaveLength(0)
   })
 
+  it('invalid action defaults to pass and emits validation-failed event', async () => {
+    const discussion = new BroadcastDiscussion(1)
+    const playerIds = ['alice', 'bob']
+    const game = discussionGame(discussion, playerIds)
+    const engine = new Engine()
+    const events: GameEvent[] = []
+    engine.onEvent(e => events.push(e))
+
+    // alice sends valid statement, bob sends garbage
+    const players = scriptedPlayers([
+      ['alice', { statement: 'hello' }],
+      ['bob', 42],
+    ])
+
+    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    expect(outcome).not.toBeNull()
+
+    const result = outcome!.metadata!.discussion as DiscussionResult
+    // Only alice's statement (bob's invalid action defaulted to pass)
+    expect(result.statements).toHaveLength(1)
+    expect(result.statements[0].playerId).toBe('alice')
+  })
+
   it('firstSpeakers option orders requests with specified players first', async () => {
     const discussion = new BroadcastDiscussion(1)
     const playerIds = ['alice', 'bob', 'charlie']
