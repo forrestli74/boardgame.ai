@@ -137,28 +137,6 @@ The game ends immediately when:
 
 **Assassination:** If Good completes 3 Quests, Evil players discuss (without revealing Character cards) and the Assassin names one Good player as Merlin. If correct, **Evil wins**. If incorrect, **Good wins**.
 
-## Optional Rules
-
-### Targeting Variant
-
-- Players may complete Quests in any order (not just sequential).
-- The Leader chooses both the team AND which Quest to attempt.
-- Team size must match the chosen Quest's requirement.
-- A Quest may not be attempted a second time once completed.
-- The 5th Quest cannot be attempted until at least 2 other Quests have been completed successfully.
-- The 4th Quest 2-Fail rule still applies for 7+ players.
-
-### Lady of the Lake
-
-- Best for games of 7+ players. Strengthens Good.
-- At game start, give the Lady of the Lake token to the player to the Leader's right.
-- Immediately after the **2nd, 3rd, and 4th** Quest is resolved, the Lady holder chooses one player to examine.
-- The examined player passes a Loyalty card matching their true loyalty to the Lady holder.
-- The Lady holder may discuss what they learned but **cannot reveal the Loyalty card**.
-- The examined player receives the Lady of the Lake token.
-- A player who has held the Lady cannot be examined by it again.
-- The Lady is used only **3 times** in the game.
-
 ## Recommended Role Setups by Player Count
 
 The official rulebook only requires Merlin + Assassin; all other roles are optional. The table below reflects community consensus from BGG, Reddit, and tournament play. See [avalon-role-setup-rationale.md](avalon-role-setup-rationale.md) for detailed reasoning.
