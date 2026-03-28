@@ -66,7 +66,7 @@ function event(gameId: string, data: unknown): GameEvent {
 - [ ] **State is internal** — never expose full state through `view`
 - [ ] **`view` is per-player** — only show what that player should see
 - [ ] **Yield ALL current requests** — engine diffs against pending
-- [ ] **Handle `null` actions** — engine sends null when validation retries exhausted; apply a default
+- [ ] **Validate player actions** — engine passes raw actions; use `actionSchema.safeParse()` to validate and re-request on failure
 - [ ] **`actionSchema` is a Zod schema** — describes what the player can do
 - [ ] **Events are self-describing** — use `data.type` to distinguish (e.g., `round-result`, `role-assigned`)
 - [ ] **Generator returns `GameOutcome`** — `{ scores: Record<string, number> }`

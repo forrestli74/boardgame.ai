@@ -12,10 +12,9 @@ Engine.run(game, players, config)
 │  ├─ 2a. Record events from result.value
 │  ├─ 2b. Diff requests against pending map, send new ones to players
 │  ├─ 2c. Promise.race(pending) — wait for first response
-│  ├─ 2d. Validate: actionSchema.safeParse → retry (3x) → null
-│  ├─ 2e. Record player event
-│  ├─ 2f. result = gen.next({ playerId, action })
-│  └─ 2g. Back to 2a
+│  ├─ 2d. Record player event
+│  ├─ 2e. result = gen.next({ playerId, action }) — raw, unvalidated
+│  └─ 2f. Back to 2a
 │
 └─ 3. result.done === true → return result.value (GameOutcome)
 ```

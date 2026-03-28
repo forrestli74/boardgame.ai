@@ -24,7 +24,7 @@ Mediator. Owns the game loop.
 - Calls `game.play(config)` to get a generator
 - Drives the generator with `.next()` — first call starts the game, subsequent calls deliver player responses
 - **Diffs requests** — each yield returns ALL current requests; engine only sends new ones (keyed by `playerId`)
-- **Validates** responses via `actionSchema.safeParse()` with retry (3 attempts), passes `null` on exhaustion
+- **Passes raw actions** to the game without validation — games validate themselves
 - Emits events via `onEvent()` listeners (e.g., Recorder for JSONL logging)
 - Stops when `pending.size === 0` (returns null) or generator completes (returns `GameOutcome`)
 
@@ -38,7 +38,7 @@ Generator-based state machine. The `play()` method is a generator that yields `G
 | `GameFlow` | `Generator<GameResponse, GameOutcome, PlayerAction>` |
 | `PlayerAction` | `{ playerId: string; action: unknown }` — passed to generator via `.next()` |
 
-Each `yield` sends requests + events to the engine. Each `.next(playerAction)` delivers one player's validated response. Generator completion signals the game is terminal; the return value is the outcome.
+Each `yield` sends requests + events to the engine. Each `.next(playerAction)` delivers one player's raw response. The game is responsible for validating actions. Generator completion signals the game is terminal; the return value is the outcome.
 
 ## Player (`src/core/player.ts`)
 
