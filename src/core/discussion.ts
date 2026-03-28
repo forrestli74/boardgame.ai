@@ -29,7 +29,7 @@ export interface Discussion {
 }
 
 export const DiscussionStatementSchema = z.object({
-  statement: z.string().describe('Your statement to the group, or empty string to pass'),
+  statement: z.string().describe('Your statement to the group. Pass with empty string unless you have something to add.'),
 })
 
 function event(gameId: string, data: unknown): GameEvent {
