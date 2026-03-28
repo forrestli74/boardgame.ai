@@ -32,13 +32,13 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 
 - [x] **RAND-01**: Pre-compute random decisions in TypeScript (seeded PRNG), pass as facts to LLM — LLM must not generate its own randomness
 
-### AI Agents (Phase 3)
+### AI Agents (Phase 3 — Complete)
 
-- [ ] **AGENT-01**: LLM player with configurable model → T-LLM-PLAYER
-- [ ] **AGENT-02**: Configurable persona/strategy → T-LLM-PROMPTS
-- [ ] **AGENT-03**: Role-specific prompt components → T-LLM-PROMPTS
-- [ ] **AGENT-04**: Structured output validation with retry → T-LLM-PLAYER
-- [ ] **AGENT-05**: Per-decision reasoning trace → T-LLM-PLAYER
+- [x] **AGENT-01**: LLM player with configurable model → T-LLM-PLAYER
+- [x] **AGENT-02**: Configurable persona/strategy → T-LLM-PROMPTS
+- [x] **AGENT-03**: Role-specific prompt components → T-LLM-PROMPTS
+- [x] **AGENT-04**: Structured output validation with retry → T-LLM-PLAYER
+- [x] **AGENT-05**: Per-decision reasoning trace → T-LLM-PLAYER
 
 ### Discussion (Phase 3 — Complete)
 

@@ -84,7 +84,13 @@ Native Game implementation for The Resistance: Avalon. Deterministic game logic 
 
 ## LLM Player (`src/players/llm-player.ts`)
 
-LLM-powered Player implementation. Receives an `ActionRequest` and uses the Vercel AI SDK's `generateText()` with forced tool use to get a structured action from the LLM. Supports optional `persona` string and configurable model via `'provider:model'` string (default: `'google:gemini-2.5-flash'`). Stateless per request.
+LLM-powered Player implementation with persistent memory and chain-of-thought reasoning. Each turn, the LLM receives the game view + its memory, and returns reasoning + updated memory + action via forced tool use.
+
+- **Memory**: Free-form string persisting across `act()` calls. Soft-capped at 300 words via prompt instruction.
+- **Chain of thought**: Private reasoning logged each turn, not shared with other players.
+- **Persona**: Optional personality + strategy text concatenated into system prompt.
+- **Dev visibility**: `getMemory()`, `getLastReasoning()` accessors + `onThought` callback.
+- **Schema wrapping**: The game's `actionSchema` is wrapped in `{ reasoning, memory, action }`. Only `action` is returned to the Engine.
 
 ## Provider Registry (`src/core/llm-registry.ts`)
 
