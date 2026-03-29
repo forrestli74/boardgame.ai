@@ -167,26 +167,36 @@ describe('LLMPlayer', () => {
     await expect(player.act(makeRequest())).rejects.toThrow('LLM returned no tool call')
   })
 
-  it('calls onThought after each act()', async () => {
-    const onThought = vi.fn()
+  it('emits thought event via onEvent listener', async () => {
+    const listener = vi.fn()
     mockResponse({ position: 5 }, 'my reasoning', 'my memory')
     const player = new LLMPlayer('p1', 'Alice')
-    player.onThought = onThought
+    player.onEvent(listener)
 
     await player.act(makeRequest())
 
-    expect(onThought).toHaveBeenCalledOnce()
-    expect(onThought).toHaveBeenCalledWith({
-      reasoning: 'my reasoning',
-      memory: 'my memory',
-      action: { position: 5 },
+    expect(listener).toHaveBeenCalledOnce()
+    expect(listener).toHaveBeenCalledWith({
+      type: 'thought',
+      data: { reasoning: 'my reasoning', memory: 'my memory', action: { position: 5 } },
+      triggerSeq: undefined,
     })
   })
 
-  it('does not throw when onThought is not set', async () => {
+  it('includes triggerSeq in emitted event when present on request', async () => {
+    const listener = vi.fn()
+    mockResponse({ position: 1 }, 'r', 'm')
+    const player = new LLMPlayer('p1', 'Alice')
+    player.onEvent(listener)
+
+    await player.act(makeRequest({ triggerSeq: 42 }))
+
+    expect(listener.mock.calls[0][0].triggerSeq).toBe(42)
+  })
+
+  it('works without any listeners', async () => {
     mockResponse({ position: 3 }, 'reasoning', 'memory')
     const player = new LLMPlayer('p1', 'Alice')
-    // onThought is not set
 
     await expect(player.act(makeRequest())).resolves.toEqual({ position: 3 })
   })

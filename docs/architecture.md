@@ -89,7 +89,7 @@ LLM-powered Player implementation with persistent memory and chain-of-thought re
 - **Memory**: Free-form string persisting across `act()` calls. Soft-capped at 300 words via prompt instruction.
 - **Chain of thought**: Private reasoning logged each turn, not shared with other players.
 - **Persona**: Optional personality + strategy text concatenated into system prompt.
-- **Dev visibility**: `getMemory()`, `getLastReasoning()` accessors + `onThought` callback.
+- **Dev visibility**: `getMemory()`, `getLastReasoning()` accessors + `onEvent()` listener (emits `PlayerPrivateEvent`).
 - **Schema wrapping**: The game's `actionSchema` is wrapped in `{ reasoning, memory, action }`. Only `action` is returned to the Engine.
 
 ## Provider Registry (`src/core/llm-registry.ts`)

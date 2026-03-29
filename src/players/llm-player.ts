@@ -1,6 +1,6 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
-import type { Player } from '../core/player.js'
+import type { Player, PlayerPrivateEvent } from '../core/player.js'
 import type { ActionRequest } from '../core/types.js'
 import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
 
@@ -32,7 +32,7 @@ export class LLMPlayer implements Player {
   private readonly persona?: string
   private memory = ''
   private lastReasoning_?: string
-  onThought?: (data: { reasoning: string; memory: string; action: unknown }) => void
+  private privateListeners: ((event: PlayerPrivateEvent) => void)[] = []
 
   constructor(id: string, name: string, options?: LLMPlayerOptions) {
     this.id = id
@@ -43,6 +43,14 @@ export class LLMPlayer implements Player {
 
   getMemory(): string { return this.memory }
   getLastReasoning(): string | undefined { return this.lastReasoning_ }
+
+  onEvent(listener: (event: PlayerPrivateEvent) => void): void {
+    this.privateListeners.push(listener)
+  }
+
+  private emitPrivate(event: PlayerPrivateEvent): void {
+    for (const fn of this.privateListeners) fn(event)
+  }
 
   async act(request: ActionRequest): Promise<unknown> {
     const systemPrompt = buildSystemPrompt(this.persona)
@@ -81,7 +89,11 @@ export class LLMPlayer implements Player {
     const response = call.input as { reasoning: string; memory: string; action: unknown }
     this.memory = response.memory
     this.lastReasoning_ = response.reasoning
-    this.onThought?.({ reasoning: response.reasoning, memory: response.memory, action: response.action })
+    this.emitPrivate({
+      type: 'thought',
+      data: { reasoning: response.reasoning, memory: response.memory, action: response.action },
+      triggerSeq: request.triggerSeq,
+    })
 
     return response.action
   }
