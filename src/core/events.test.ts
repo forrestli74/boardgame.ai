@@ -6,6 +6,7 @@ describe('GameEventSchema', () => {
 
   it('parses player event with required fields', () => {
     const event = GameEventSchema.parse({
+      seq: 0,
       source: 'player',
       gameId: 'g1',
       playerId: 'p1',
@@ -17,6 +18,7 @@ describe('GameEventSchema', () => {
 
   it('parses player event with optional reasoning', () => {
     const event = GameEventSchema.parse({
+      seq: 1,
       source: 'player',
       gameId: 'g1',
       playerId: 'p1',
@@ -31,6 +33,7 @@ describe('GameEventSchema', () => {
 
   it('parses game event with required fields', () => {
     const event = GameEventSchema.parse({
+      seq: 2,
       source: 'game',
       gameId: 'g1',
       data: { type: 'round-start' },
@@ -59,6 +62,7 @@ describe('GameEventSchema', () => {
 
   it('discriminates on source field', () => {
     const playerEvent = GameEventSchema.parse({
+      seq: 3,
       source: 'player',
       gameId: 'g1',
       playerId: 'p1',
@@ -66,6 +70,7 @@ describe('GameEventSchema', () => {
       timestamp: ts,
     })
     const gameEvent = GameEventSchema.parse({
+      seq: 4,
       source: 'game',
       gameId: 'g1',
       data: {},

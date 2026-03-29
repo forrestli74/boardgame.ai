@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const PlayerEventSchema = z.object({
+  seq: z.number().int(),
   source: z.literal('player'),
   gameId: z.string(),
   playerId: z.string(),
@@ -10,6 +11,7 @@ export const PlayerEventSchema = z.object({
 })
 
 export const GameSourceEventSchema = z.object({
+  seq: z.number().int(),
   source: z.literal('game'),
   gameId: z.string(),
   data: z.unknown(),
