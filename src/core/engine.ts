@@ -11,22 +11,22 @@ interface PendingResponse {
 
 export class Engine {
   private listeners: ((event: GameEvent) => void)[] = []
-  private seq = -1
+  private lastSeq = -1
 
   onEvent(listener: (event: GameEvent) => void): void {
     this.listeners.push(listener)
   }
 
   private emit(event: Omit<GameEvent, 'seq'>): void {
-    this.seq++
-    const stamped = { seq: this.seq, ...event } as GameEvent
+    this.lastSeq++
+    const stamped = { seq: this.lastSeq, ...event } as GameEvent
     for (const fn of this.listeners) fn(stamped)
   }
 
   async run(game: Game, players: Map<string, Player>, config: GameConfig): Promise<GameOutcome | null> {
     const gen = game.play(config)
     const pending = new Map<string, Promise<PendingResponse>>()
-    this.seq = -1
+    this.lastSeq = -1
 
     let result = await gen.next()
     while (!result.done) {
@@ -38,7 +38,7 @@ export class Engine {
       for (const req of requests) {
         if (!pending.has(req.playerId)) {
           const player = players.get(req.playerId)!
-          const stamped = { ...req, lastSeenSeq: this.seq }
+          const stamped = { ...req, lastSeenSeq: this.lastSeq }
           const promise = player.act(stamped)
             .then(action => ({ playerId: req.playerId, action, request: stamped }))
           pending.set(req.playerId, promise)
