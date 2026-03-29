@@ -3,7 +3,7 @@ import type { ActionRequest } from './types.js'
 export interface PlayerPrivateEvent {
   type: string
   data: unknown
-  triggerSeq?: number
+  lastSeenSeq?: number
 }
 
 export interface Player {

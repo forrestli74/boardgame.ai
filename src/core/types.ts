@@ -5,7 +5,7 @@ export interface ActionRequest {
   readonly playerId: string
   readonly view: unknown
   readonly actionSchema: ZodSchema
-  readonly triggerSeq?: number
+  readonly lastSeenSeq?: number
 }
 
 export interface GameResponse {

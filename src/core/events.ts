@@ -5,6 +5,7 @@ export const PlayerEventSchema = z.object({
   source: z.literal('player'),
   gameId: z.string(),
   playerId: z.string(),
+  lastSeenSeq: z.number().int().optional(),
   data: z.unknown(),
   reasoning: z.string().optional(),
   timestamp: z.string().datetime(),

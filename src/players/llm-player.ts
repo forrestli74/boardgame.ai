@@ -92,7 +92,7 @@ export class LLMPlayer implements Player {
     this.emitPrivate({
       type: 'thought',
       data: { reasoning: response.reasoning, memory: response.memory, action: response.action },
-      triggerSeq: request.triggerSeq,
+      lastSeenSeq: request.lastSeenSeq,
     })
 
     return response.action

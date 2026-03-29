@@ -179,19 +179,19 @@ describe('LLMPlayer', () => {
     expect(listener).toHaveBeenCalledWith({
       type: 'thought',
       data: { reasoning: 'my reasoning', memory: 'my memory', action: { position: 5 } },
-      triggerSeq: undefined,
+      lastSeenSeq: undefined,
     })
   })
 
-  it('includes triggerSeq in emitted event when present on request', async () => {
+  it('includes lastSeenSeq in emitted event when present on request', async () => {
     const listener = vi.fn()
     mockResponse({ position: 1 }, 'r', 'm')
     const player = new LLMPlayer('p1', 'Alice')
     player.onEvent(listener)
 
-    await player.act(makeRequest({ triggerSeq: 42 }))
+    await player.act(makeRequest({ lastSeenSeq: 42 }))
 
-    expect(listener.mock.calls[0][0].triggerSeq).toBe(42)
+    expect(listener.mock.calls[0][0].lastSeenSeq).toBe(42)
   })
 
   it('works without any listeners', async () => {
