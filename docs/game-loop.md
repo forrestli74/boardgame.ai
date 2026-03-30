@@ -3,16 +3,16 @@
 ## Lifecycle
 
 ```
-Engine.run(game, players, config)
+Engine.run(game, players)
 │
-├─ 1. gen = game.play(config)
+├─ 1. gen = game.play(playerIds)
 │     result = gen.next()          // first yield
 │
 ├─ 2. LOOP (while !result.done):
-│  ├─ 2a. Record events from result.value
+│  ├─ 2a. Wrap raw event data from result.value into GameSourceEvents (stamp seq/gameId/ts)
 │  ├─ 2b. Diff requests against pending map, send new ones to players
 │  ├─ 2c. Promise.race(pending) — wait for first response
-│  ├─ 2d. Record player event
+│  ├─ 2d. Wrap player action into PlayerSourceEvent (stamp seq/gameId/ts)
 │  ├─ 2e. result = gen.next({ playerId, action }) — raw, unvalidated
 │  └─ 2f. Back to 2a
 │
@@ -43,12 +43,12 @@ Outcome: { scores: {alice: 2, bob: 1} }
 
 ## JSONL Output
 
-Each line is valid JSON with a `gameId` field. Two shapes:
+Each line is valid JSON with `seq`, `source`, `gameId`, and `timestamp` (all stamped by engine). Two shapes:
 
 ```jsonl
-{"source":"game","gameId":"g1","data":{"type":"start","players":["alice","bob"]},"timestamp":"..."}
-{"source":"player","gameId":"g1","playerId":"alice","data":7,"timestamp":"..."}
-{"source":"game","gameId":"g1","data":{"type":"round-result","round":1,"target":7,"winner":"alice"},"timestamp":"..."}
+{"seq":0,"source":"game","gameId":"g1","data":{"type":"start","players":["alice","bob"]},"timestamp":"..."}
+{"seq":1,"source":"player","gameId":"g1","playerId":"alice","data":7,"timestamp":"..."}
+{"seq":2,"source":"game","gameId":"g1","data":{"type":"round-result","round":1,"target":7,"winner":"alice"},"timestamp":"..."}
 ```
 
-Events are the complete game record — no separate log schema.
+Games yield raw `data` objects — the engine wraps them. Events are the complete game record.

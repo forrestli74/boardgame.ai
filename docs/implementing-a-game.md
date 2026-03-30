@@ -5,21 +5,19 @@ Build a class implementing `Game`. The framework handles player communication, v
 ## Interface
 
 ```typescript
-import type { ZodSchema } from 'zod'
-import type { GameResponse, GameConfig, GameOutcome } from './core/types.js'
+import type { GameResponse, GameOutcome } from './core/types.js'
 
 type PlayerAction = { playerId: string; action: unknown }
-type GameFlow = Generator<GameResponse, GameOutcome, PlayerAction>
+type GameFlow = AsyncGenerator<GameResponse, GameOutcome, PlayerAction>
 
 interface Game {
-  readonly optionsSchema: ZodSchema
-  play(config: GameConfig): GameFlow
+  play(playerIds: string[]): GameFlow
 }
 ```
 
-The `play()` method returns a generator:
-- **`yield`** sends a `GameResponse` (requests + events) to the engine
-- **`.next(playerAction)`** receives one player's validated response
+The `play()` method returns an async generator:
+- **`yield`** sends `{ requests, events: unknown[] }` to the engine — events are raw data, the engine stamps `seq`, `gameId`, `timestamp`
+- **`.next(playerAction)`** receives one player's raw response
 - **`return`** produces the final `GameOutcome` and ends the game
 
 ## Minimal Example: Coin Flip
@@ -27,27 +25,22 @@ The `play()` method returns a generator:
 ```typescript
 import { z } from 'zod'
 import type { Game, GameFlow } from './core/game.js'
-import type { GameConfig } from './core/types.js'
-import type { GameEvent } from './core/events.js'
 
 const CallSchema = z.enum(['heads', 'tails'])
 
 class CoinFlip implements Game {
-  readonly optionsSchema = z.object({})
-
-  play(config: GameConfig): GameFlow {
-    const playerId = config.players[0].id
-    const gameId = config.gameId
+  play(playerIds: string[]): GameFlow {
+    const playerId = playerIds[0]
     const result = Math.random() > 0.5 ? 'heads' : 'tails'
 
-    return (function* () {
+    return (async function* () {
       const { action } = yield {
         requests: [{
           playerId,
           view: { message: 'Call it: heads or tails' },
           actionSchema: CallSchema,
         }],
-        events: [event(gameId, { type: 'flip', result })],
+        events: [{ type: 'flip', result }],
       }
 
       const call = (action ?? result) as 'heads' | 'tails'
@@ -55,11 +48,9 @@ class CoinFlip implements Game {
     })()
   }
 }
-
-function event(gameId: string, data: unknown): GameEvent {
-  return { source: 'game', gameId, data, timestamp: new Date().toISOString() }
-}
 ```
+
+Events are raw data objects — no `source`, `gameId`, or `timestamp`. The engine stamps those. For compile-time safety, define a typed event union for your game (see Avalon's `AvalonEventData` for the pattern).
 
 ## Checklist
 
@@ -138,16 +129,13 @@ const results = yield* this.collectQuestCards(team)
 ## Running Your Game
 
 ```typescript
-import { Engine } from './core/engine.js'
-import { Recorder } from './core/recorder.js'
+import { runGame } from './core/run-game.js'
 
-const game = new CoinFlip()
-const recorder = new Recorder('game-1', '/tmp/coinflip.jsonl')
-const players = new Map([['p1', somePlayer]])
-const config = { gameId: 'game-1', seed: 42, players: [{ id: 'p1', name: 'Alice' }] }
-
-const engine = new Engine()
-engine.onEvent((e) => recorder.record(e))
-const outcome = await engine.run(game, players, config)
-recorder.flush()
+const result = await runGame({
+  gameId: 'game-1',
+  game: new CoinFlip(),
+  players: [somePlayer],
+  outputDir: './output/game-1',
+})
+// result.outcome, result.outputDir
 ```

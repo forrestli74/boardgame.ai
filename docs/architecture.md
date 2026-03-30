@@ -3,19 +3,12 @@
 ## Data Flow
 
 ```
-┌──────────┐     ┌────────┐     ┌──────────┐     ┌──────────┐
-│  Engine   │────▶│  Game   │     │  Player  │     │ Recorder │
-│ (mediator)│◀────│ (state) │     │  (agent) │     │  (JSONL)  │
-└──────────┘     └────────┘     └──────────┘     └──────────┘
-     │                                │                 ▲
-     │         ActionRequest          │                 │
-     ├───────────────────────────────▶│                 │
-     │         action (unknown)       │                 │
-     │◀──────────────────────────────┤                 │
-     │                                                  │
-     │  GameEvent (stamped w/ gameId, via onEvent)       │
-     ├─────────────────────────────────────────────────▶│
+Game events:     Game ──▶ Engine (stamps seq/gameId/ts) ──▶ listeners ──▶ Recorder/Artifacts
+Player actions:  Player.act() ──▶ Engine (stamps seq/gameId/ts) ──▶ listeners ──▶ Recorder/Artifacts
+Private events:  Player emits raw data ──▶ runGame wires ──▶ Artifacts (players/{id}.jsonl)
 ```
+
+Games yield `events: unknown[]` (raw data). The engine wraps each into a `GameSourceEvent` with `seq`, `gameId`, `timestamp`. Player actions are wrapped into `PlayerSourceEvent` the same way. Player private events (e.g., LLM reasoning) bypass the engine entirely — `runGame` wires them to artifacts.
 
 ## Engine (`src/core/engine.ts`)
 
@@ -25,7 +18,7 @@ Mediator. Owns the game loop. Constructed with `new Engine(gameId)`.
 - Drives the generator with `.next()` — first call starts the game, subsequent calls deliver player responses
 - **Diffs requests** — each yield returns ALL current requests; engine only sends new ones (keyed by `playerId`)
 - **Passes raw actions** to the game without validation — games validate themselves
-- **Stamps `gameId`** on all events before emitting
+- **Stamps `seq`, `gameId`, `timestamp`** on all events before emitting
 - Emits events via `onEvent()` listeners (e.g., Recorder for JSONL logging)
 - Stops when `pending.size === 0` (returns null) or generator completes (returns `GameOutcome`)
 
@@ -37,10 +30,9 @@ Generator-based state machine. The `play()` method is a generator that yields `G
 |---|---|
 | `Game` | Interface — `play(playerIds: string[]): GameFlow` |
 | `GameFlow` | `Generator<GameResponse, GameOutcome, PlayerAction>` |
-| `GameYieldedEvent` | Event type yielded by games — no `gameId`/`seq` (Engine stamps those) |
 | `PlayerAction` | `{ playerId: string; action: unknown }` — passed to generator via `.next()` |
 
-Each `yield` sends requests + events to the engine. Each `.next(playerAction)` delivers one player's raw response. The game is responsible for validating actions. Generator completion signals the game is terminal; the return value is the outcome.
+Each `yield` sends `{ requests, events: unknown[] }` to the engine. Events are raw data — the engine stamps them. Each `.next(playerAction)` delivers one player's raw response. The game is responsible for validating actions. Generator completion signals the game is terminal; the return value is the outcome.
 
 ## Player (`src/core/player.ts`)
 
@@ -72,7 +64,7 @@ Organizes all game run outputs into a directory. Creates the directory structure
   events.jsonl         # All GameEvents (sync append)
   outcome.json         # GameOutcome (written after game ends)
   players/
-    {playerId}.jsonl   # PlayerPrivateEvent per turn
+    {playerId}.jsonl   # Raw private data per turn (shape defined by player impl)
 ```
 
 ## runGame (`src/core/run-game.ts`)
@@ -109,7 +101,7 @@ LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript
 
 Native Game implementation for The Resistance: Avalon. Deterministic game logic — no LLMs.
 
-- **`types.ts`** — Types, Zod schemas, lookup tables (team counts, quest configs, role configs), `assignRoles()`, `buildView()`
+- **`types.ts`** — Types, Zod schemas, lookup tables, `AvalonEventData` typed event union, `assignRoles()`, `buildView()`
 - **`avalon.ts`** — `Avalon` implements `Game`. Constructor takes `{ seed?, discussion? }`. Generator-based: team proposal → vote → quest → assassination.
 - **`avalon.test.ts`** — Deterministic tests with `scriptedPlayers` helper.
 
@@ -120,7 +112,7 @@ LLM-powered Player implementation with persistent memory and chain-of-thought re
 - **Memory**: Free-form string persisting across `act()` calls. Soft-capped at 300 words via prompt instruction.
 - **Chain of thought**: Private reasoning logged each turn, not shared with other players.
 - **Persona**: Optional personality + strategy text concatenated into system prompt.
-- **Dev visibility**: `getMemory()`, `getLastReasoning()` accessors + `onEvent()` listener (emits `PlayerPrivateEvent`).
+- **Dev visibility**: `getMemory()`, `getLastReasoning()` accessors + `onEvent()` listener (emits raw `{ reasoning, memory, action, lastSeenSeq }`).
 - **Schema wrapping**: The game's `actionSchema` is wrapped in `{ reasoning, memory, action }`. Only `action` is returned to the Engine.
 
 ## Provider Registry (`src/core/llm-registry.ts`)
@@ -136,7 +128,7 @@ src/
 │   ├── engine.ts             # Engine — mediator
 │   ├── game.ts               # Game interface
 │   ├── player.ts             # Player interface
-│   ├── events.ts             # GameEvent discriminated union
+│   ├── events.ts             # GameEvent types (GameSourceEvent, PlayerSourceEvent)
 │   ├── recorder.ts           # JSONL writer via Pino
 │   ├── artifacts.ts          # GameArtifacts — output directory + JSONL files
 │   ├── run-game.ts           # runGame() free function
