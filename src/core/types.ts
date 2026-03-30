@@ -1,5 +1,4 @@
-import { z, type ZodSchema } from 'zod'
-import type { GameYieldedEvent } from './events.js'
+import type { ZodSchema } from 'zod'
 
 export interface ActionRequest {
   readonly playerId: string
@@ -10,12 +9,10 @@ export interface ActionRequest {
 
 export interface GameResponse {
   readonly requests: ActionRequest[]
-  readonly events: GameYieldedEvent[]
+  readonly events: unknown[]
 }
 
-export const GameOutcomeSchema = z.object({
-  scores: z.record(z.string(), z.number()),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-})
-
-export type GameOutcome = z.infer<typeof GameOutcomeSchema>
+export interface GameOutcome {
+  scores: Record<string, number>
+  metadata?: Record<string, unknown>
+}

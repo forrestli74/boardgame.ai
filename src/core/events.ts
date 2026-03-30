@@ -1,33 +1,19 @@
-import { z } from 'zod'
+export interface GameSourceEvent {
+  seq: number
+  source: 'game'
+  gameId: string
+  data: unknown
+  timestamp: string
+}
 
-export const PlayerEventSchema = z.object({
-  seq: z.number().int(),
-  source: z.literal('player'),
-  gameId: z.string(),
-  playerId: z.string(),
-  lastSeenSeq: z.number().int().optional(),
-  data: z.unknown(),
-  reasoning: z.string().optional(),
-  timestamp: z.string().datetime(),
-})
+export interface PlayerSourceEvent {
+  seq: number
+  source: 'player'
+  gameId: string
+  playerId: string
+  lastSeenSeq?: number
+  data: unknown
+  timestamp: string
+}
 
-export const GameSourceEventSchema = z.object({
-  seq: z.number().int(),
-  source: z.literal('game'),
-  gameId: z.string(),
-  data: z.unknown(),
-  timestamp: z.string().datetime(),
-})
-
-export const GameEventSchema = z.discriminatedUnion('source', [
-  PlayerEventSchema,
-  GameSourceEventSchema,
-])
-
-export type GameEvent = z.infer<typeof GameEventSchema>
-
-/** Distributes Omit over a union type */
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
-
-/** Event shape yielded by games — Engine stamps seq and gameId */
-export type GameYieldedEvent = DistributiveOmit<GameEvent, 'seq' | 'gameId'> & { gameId?: string }
+export type GameEvent = GameSourceEvent | PlayerSourceEvent
