@@ -1,16 +1,11 @@
 import type { Game, GameFlow, PlayerAction } from '../../core/game.js'
 import type { GameOutcome, ActionRequest } from '../../core/types.js'
-import type { GameYieldedEvent } from '../../core/events.js'
 import type { Discussion } from '../../core/discussion.js'
 import {
-  type AvalonPlayer, type AvalonState,
+  type AvalonPlayer, type AvalonState, type AvalonEventData,
   TeamProposalSchema, TeamVoteSchema, QuestVoteSchema, AssassinationTargetSchema,
   QUEST_CONFIGS, assignRoles, buildView,
 } from './types.js'
-
-function event(data: unknown): GameYieldedEvent {
-  return { source: 'game', data, timestamp: new Date().toISOString() }
-}
 
 export class Avalon implements Game {
   private seed: number
@@ -39,8 +34,8 @@ export class Avalon implements Game {
       }
 
       // Events to carry forward and emit with the next yield that has requests
-      let pendingEvents: GameYieldedEvent[] = [
-        event({ type: 'game-start', players: playerIds, questConfigs }),
+      let pendingEvents: AvalonEventData[] = [
+        { type: 'game-start', players: playerIds, questConfigs },
       ]
 
       let successes = 0
@@ -65,7 +60,7 @@ export class Avalon implements Game {
               { firstSpeakers: [leader.id] },
             )
             // Carry discussion's pending events forward
-            pendingEvents.push(...result.pendingEvents)
+            pendingEvents.push(...result.pendingEvents as AvalonEventData[])
           }
 
           // Yield team-proposal request, carrying forward any pending events
@@ -77,14 +72,14 @@ export class Avalon implements Game {
 
           let proposalParsed = TeamProposalSchema.safeParse(proposalAction.action)
           if (!proposalParsed.success) {
-            pendingEvents.push(event({ type: 'validation-failed', playerId: leader.id, raw: proposalAction.action }))
+            pendingEvents.push({ type: 'validation-failed', playerId: leader.id, raw: proposalAction.action })
             proposalParsed = { success: true, data: { team: playerIds.slice(0, questConfigs[state.questNumber].teamSize) } } as any
           }
           state.proposedTeam = proposalParsed.data!.team
 
-          const proposalEvent = event({
-            type: 'team-proposed', leader: leader.id, team: state.proposedTeam, questNumber: state.questNumber,
-          })
+          const proposalEvent: AvalonEventData = {
+            type: 'team-proposed', leader: leader.id, team: state.proposedTeam!, questNumber: state.questNumber,
+          }
 
           // --- Team Vote (parallel) ---
           state.phase = 'team-vote'
@@ -99,7 +94,7 @@ export class Avalon implements Game {
           }
           let firstVoteParsed = TeamVoteSchema.safeParse(firstVote.action)
           if (!firstVoteParsed.success) {
-            pendingEvents.push(event({ type: 'validation-failed', playerId: firstVote.playerId, raw: firstVote.action }))
+            pendingEvents.push({ type: 'validation-failed', playerId: firstVote.playerId, raw: firstVote.action })
             firstVoteParsed = { success: true, data: { approve: false } } as any
           }
           votes[firstVote.playerId] = firstVoteParsed.data!.approve
@@ -108,7 +103,7 @@ export class Avalon implements Game {
             const nextVote: PlayerAction = yield { requests: [], events: [] }
             let nextVoteParsed = TeamVoteSchema.safeParse(nextVote.action)
             if (!nextVoteParsed.success) {
-              pendingEvents.push(event({ type: 'validation-failed', playerId: nextVote.playerId, raw: nextVote.action }))
+              pendingEvents.push({ type: 'validation-failed', playerId: nextVote.playerId, raw: nextVote.action })
               nextVoteParsed = { success: true, data: { approve: false } } as any
             }
             votes[nextVote.playerId] = nextVoteParsed.data!.approve
@@ -122,9 +117,9 @@ export class Avalon implements Game {
             voteRecord[pid] = v ? 'approve' : 'reject'
           }
 
-          const voteResultEvent = event({
+          const voteResultEvent: AvalonEventData = {
             type: 'vote-result', votes: voteRecord, result: approved ? 'approved' : 'rejected',
-          })
+          }
 
           if (approved) {
             teamApproved = true
@@ -135,7 +130,7 @@ export class Avalon implements Game {
             state.proposalRejections++
             if (state.proposalRejections >= 5) {
               // Hammer: game over — return with terminal events as metadata
-              const gameEndEvent = event({ type: 'game-end', reason: 'hammer', winner: 'evil' })
+              const gameEndEvent: AvalonEventData = { type: 'game-end', reason: 'hammer', winner: 'evil' }
               return self.makeScores(players, 'evil', [voteResultEvent, gameEndEvent])
             }
             state.leaderIndex = (state.leaderIndex + 1) % playerCount
@@ -159,7 +154,7 @@ export class Avalon implements Game {
         pendingEvents = []
         let firstQuestParsed = QuestVoteSchema.safeParse(firstQuest.action)
         if (!firstQuestParsed.success) {
-          pendingEvents.push(event({ type: 'validation-failed', playerId: firstQuest.playerId, raw: firstQuest.action }))
+          pendingEvents.push({ type: 'validation-failed', playerId: firstQuest.playerId, raw: firstQuest.action })
           firstQuestParsed = { success: true, data: { success: true } } as any
         }
         questVotes[firstQuest.playerId] = firstQuestParsed.data!.success
@@ -168,7 +163,7 @@ export class Avalon implements Game {
           const nextQuest: PlayerAction = yield { requests: [], events: [] }
           let nextQuestParsed = QuestVoteSchema.safeParse(nextQuest.action)
           if (!nextQuestParsed.success) {
-            pendingEvents.push(event({ type: 'validation-failed', playerId: nextQuest.playerId, raw: nextQuest.action }))
+            pendingEvents.push({ type: 'validation-failed', playerId: nextQuest.playerId, raw: nextQuest.action })
             nextQuestParsed = { success: true, data: { success: true } } as any
           }
           questVotes[nextQuest.playerId] = nextQuestParsed.data!.success
@@ -181,10 +176,10 @@ export class Avalon implements Game {
         if (questFailed) fails++
         else successes++
 
-        const questResultEvent = event({
+        const questResultEvent: AvalonEventData = {
           type: 'quest-result', questNumber: state.questNumber,
           result: questFailed ? 'fail' : 'success', failVotes: failCount,
-        })
+        }
 
         state.questNumber++
         state.leaderIndex = (state.leaderIndex + 1) % playerCount
@@ -197,7 +192,7 @@ export class Avalon implements Game {
 
       // --- Game End: 3 quest failures ---
       if (fails >= 3) {
-        const gameEndEvent = event({ type: 'game-end', reason: 'three-fails', winner: 'evil' })
+        const gameEndEvent: AvalonEventData = { type: 'game-end', reason: 'three-fails', winner: 'evil' }
         return self.makeScores(players, 'evil', [...pendingEvents, gameEndEvent])
       }
 
@@ -212,7 +207,7 @@ export class Avalon implements Game {
 
       let targetParsed = AssassinationTargetSchema.safeParse(assassinAction.action)
       if (!targetParsed.success) {
-        pendingEvents.push(event({ type: 'validation-failed', playerId: assassin.id, raw: assassinAction.action }))
+        pendingEvents.push({ type: 'validation-failed', playerId: assassin.id, raw: assassinAction.action })
         targetParsed = { success: true, data: { targetId: playerIds[0] } } as any
       }
       const targetId = targetParsed.data!.targetId
@@ -220,16 +215,17 @@ export class Avalon implements Game {
       const assassinationSuccess = targetId === merlin.id
       const winner = assassinationSuccess ? 'evil' : 'good'
 
-      const finalEvents = [
-        event({ type: 'assassination-attempt', assassin: assassin.id, target: targetId, result: assassinationSuccess ? 'success' : 'fail' }),
-        event({ type: 'game-end', reason: assassinationSuccess ? 'assassination' : 'three-successes', winner }),
+      const finalEvents: AvalonEventData[] = [
+        ...pendingEvents,
+        { type: 'assassination-attempt', assassin: assassin.id, target: targetId, result: assassinationSuccess ? 'success' : 'fail' },
+        { type: 'game-end', reason: assassinationSuccess ? 'assassination' : 'three-successes', winner },
       ]
 
       return self.makeScores(players, winner, finalEvents)
     })()
   }
 
-  private makeScores(players: AvalonPlayer[], winner: 'good' | 'evil', finalEvents: GameYieldedEvent[] = []): GameOutcome {
+  private makeScores(players: AvalonPlayer[], winner: 'good' | 'evil', finalEvents: unknown[] = []): GameOutcome {
     const scores: Record<string, number> = {}
     for (const p of players) {
       scores[p.id] = p.team === winner ? 1 : 0

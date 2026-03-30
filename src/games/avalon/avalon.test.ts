@@ -35,8 +35,17 @@ function collectAllEvents(emittedEvents: unknown[], outcome: { metadata?: { fina
   return [...emittedEvents, ...finalEvents]
 }
 
+// Get event payload — stamped events (from engine) have data nested under .data, raw events (from metadata.finalEvents) have it directly
+function eventPayload(e: any): any {
+  return e.source ? e.data : e
+}
+
+function findEvent(allEvents: unknown[], type: string) {
+  return allEvents.find((e: any) => eventPayload(e).type === type)
+}
+
 function findGameEnd(allEvents: unknown[]) {
-  return allEvents.find((e: any) => e.source === 'game' && (e.data as any).type === 'game-end') as any
+  return findEvent(allEvents, 'game-end')
 }
 
 describe('Avalon', () => {
@@ -71,8 +80,8 @@ describe('Avalon', () => {
     const gameEndEvent = findGameEnd(allEvents)
 
     expect(gameEndEvent).toBeDefined()
-    expect(gameEndEvent.data.reason).toBe('hammer')
-    expect(gameEndEvent.data.winner).toBe('evil')
+    expect(eventPayload(gameEndEvent).reason).toBe('hammer')
+    expect(eventPayload(gameEndEvent).winner).toBe('evil')
 
     // Evil players (bob, eve) get score 1; good players get score 0
     expect(outcome?.scores['bob']).toBe(1)
@@ -119,13 +128,11 @@ describe('Avalon', () => {
     const gameEndEvent = findGameEnd(allEvents)
 
     expect(gameEndEvent).toBeDefined()
-    expect(gameEndEvent.data.reason).toBe('three-fails')
-    expect(gameEndEvent.data.winner).toBe('evil')
+    expect(eventPayload(gameEndEvent).reason).toBe('three-fails')
+    expect(eventPayload(gameEndEvent).winner).toBe('evil')
 
     // No assassination event should exist
-    const assassinationEvent = allEvents.find(
-      (e: any) => e.source === 'game' && (e.data as any).type === 'assassination-attempt'
-    )
+    const assassinationEvent = findEvent(allEvents, 'assassination-attempt')
     expect(assassinationEvent).toBeUndefined()
 
     expect(outcome?.scores['bob']).toBe(1)
@@ -168,8 +175,8 @@ describe('Avalon', () => {
     const gameEndEvent = findGameEnd(allEvents)
 
     expect(gameEndEvent).toBeDefined()
-    expect(gameEndEvent.data.reason).toBe('three-successes')
-    expect(gameEndEvent.data.winner).toBe('good')
+    expect(eventPayload(gameEndEvent).reason).toBe('three-successes')
+    expect(eventPayload(gameEndEvent).winner).toBe('good')
 
     // Good players get score 1
     expect(outcome?.scores['alice']).toBe(1)
@@ -212,8 +219,8 @@ describe('Avalon', () => {
     const gameEndEvent = findGameEnd(allEvents)
 
     expect(gameEndEvent).toBeDefined()
-    expect(gameEndEvent.data.reason).toBe('assassination')
-    expect(gameEndEvent.data.winner).toBe('evil')
+    expect(eventPayload(gameEndEvent).reason).toBe('assassination')
+    expect(eventPayload(gameEndEvent).winner).toBe('evil')
 
     expect(outcome?.scores['bob']).toBe(1)
     expect(outcome?.scores['eve']).toBe(1)
@@ -270,15 +277,15 @@ describe('Avalon', () => {
 
     // Verify quest 3 result is 'success' with failVotes=1
     const questResultEvents = allEvents.filter(
-      (e: any) => e.source === 'game' && (e.data as any).type === 'quest-result'
+      (e: any) => eventPayload(e).type === 'quest-result'
     ) as any[]
-    const quest3Result = questResultEvents.find((e: any) => e.data.questNumber === 3)
+    const quest3Result = questResultEvents.find((e: any) => eventPayload(e).questNumber === 3)
     expect(quest3Result).toBeDefined()
-    expect(quest3Result.data.result).toBe('success')
-    expect(quest3Result.data.failVotes).toBe(1)
+    expect(eventPayload(quest3Result).result).toBe('success')
+    expect(eventPayload(quest3Result).failVotes).toBe(1)
 
     const gameEndEvent = findGameEnd(allEvents)
-    expect(gameEndEvent.data.winner).toBe('good')
+    expect(eventPayload(gameEndEvent).winner).toBe('good')
 
     // Good players score 1
     expect(outcome?.scores['alice']).toBe(1)
@@ -339,15 +346,15 @@ describe('Avalon', () => {
 
     // Verify discussion-round events were emitted
     const discussionEvents = allEvents.filter(
-      (e: any) => e.source === 'game' && (e.data as any).type === 'discussion-round'
+      (e: any) => eventPayload(e).type === 'discussion-round'
     )
     // 3 quests × 1 discussion round each = 3 discussion-round events
     expect(discussionEvents.length).toBe(3)
 
     // Verify game completed correctly
     expect(gameEndEvent).toBeDefined()
-    expect(gameEndEvent.data.reason).toBe('three-successes')
-    expect(gameEndEvent.data.winner).toBe('good')
+    expect(eventPayload(gameEndEvent).reason).toBe('three-successes')
+    expect(eventPayload(gameEndEvent).winner).toBe('good')
 
     expect(outcome?.scores['alice']).toBe(1)
     expect(outcome?.scores['charlie']).toBe(1)
@@ -397,12 +404,12 @@ describe('Avalon', () => {
     await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const teamProposedEvents = emittedEvents.filter(
-      (e: any) => e.source === 'game' && (e.data as any).type === 'team-proposed'
+      (e: any) => eventPayload(e).type === 'team-proposed'
     ) as any[]
 
     // First two proposal events should have different leaders
     expect(teamProposedEvents.length).toBeGreaterThanOrEqual(2)
-    expect(teamProposedEvents[0].data.leader).toBe('charlie')
-    expect(teamProposedEvents[1].data.leader).toBe('diana')
+    expect(eventPayload(teamProposedEvents[0]).leader).toBe('charlie')
+    expect(eventPayload(teamProposedEvents[1]).leader).toBe('diana')
   })
 })

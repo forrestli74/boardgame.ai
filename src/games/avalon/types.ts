@@ -212,3 +212,14 @@ export type TeamProposal = z.infer<typeof TeamProposalSchema>
 export type TeamVote = z.infer<typeof TeamVoteSchema>
 export type QuestVote = z.infer<typeof QuestVoteSchema>
 export type AssassinationTarget = z.infer<typeof AssassinationTargetSchema>
+
+// --- Event Data ---
+
+export type AvalonEventData =
+  | { type: 'game-start'; players: string[]; questConfigs: QuestConfig[] }
+  | { type: 'team-proposed'; leader: string; team: string[]; questNumber: number }
+  | { type: 'vote-result'; votes: Record<string, 'approve' | 'reject'>; result: 'approved' | 'rejected' }
+  | { type: 'quest-result'; questNumber: number; result: 'success' | 'fail'; failVotes: number }
+  | { type: 'assassination-attempt'; assassin: string; target: string; result: 'success' | 'fail' }
+  | { type: 'game-end'; reason: 'three-successes' | 'three-fails' | 'assassination' | 'hammer'; winner: 'good' | 'evil' }
+  | { type: 'validation-failed'; playerId: string; raw: unknown }
