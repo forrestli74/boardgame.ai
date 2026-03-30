@@ -8,7 +8,6 @@ import {
   TeamVoteSchema,
   QuestVoteSchema,
   AssassinationTargetSchema,
-  AvalonOptionsSchema,
   assignRoles,
   buildView,
   type AvalonPlayer,
@@ -210,22 +209,6 @@ describe('AssassinationTargetSchema', () => {
   })
 })
 
-describe('AvalonOptionsSchema', () => {
-  it('validates empty options', () => {
-    const result = AvalonOptionsSchema.safeParse({})
-    expect(result.success).toBe(true)
-  })
-
-  it('validates with useLady flag', () => {
-    const result = AvalonOptionsSchema.safeParse({ useLady: true })
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects invalid useLady type', () => {
-    const result = AvalonOptionsSchema.safeParse({ useLady: 'yes' })
-    expect(result.success).toBe(false)
-  })
-})
 
 describe('assignRoles', () => {
   it('returns correct count for 5 players', () => {

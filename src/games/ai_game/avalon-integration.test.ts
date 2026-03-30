@@ -22,7 +22,7 @@ const CASSETTE = join(__dirname, '__fixtures__', 'integration-AI-Game-Avalon-pla
 const SKIP = !process.env.GEMINI_API_KEY && !existsSync(CASSETTE)
 
 /** Ask an LLM whether the game events look like a valid Avalon game. */
-async function verifyGameLog(events: any[], scores: Record<string, number>): Promise<void> {
+async function verifyGameLog(events: GameEvent[], scores: Record<string, number>): Promise<void> {
   const result = await generateText({
     model: registry.languageModel(DEFAULT_MODEL as Parameters<typeof registry.languageModel>[0]),
     system: 'You are a board game expert analyzing game logs.',
@@ -47,7 +47,7 @@ ${JSON.stringify(events.map(({ timestamp, ...rest }) => rest))}`,
   })
   const verification = result.toolCalls[0]
   expect(verification).toBeDefined()
-  expect((verification!.input as any).valid).toBe(true)
+  expect((verification!.input as Record<string, unknown>).valid).toBe(true)
 }
 
 describe.skipIf(SKIP)('integration: AI Game - Avalon', () => {

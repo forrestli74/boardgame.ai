@@ -106,10 +106,6 @@ export const AssassinationTargetSchema = z.object({
   targetId: z.string(),
 })
 
-export const AvalonOptionsSchema = z.object({
-  useLady: z.boolean().optional(),
-})
-
 // --- Game State ---
 
 export interface AvalonState {

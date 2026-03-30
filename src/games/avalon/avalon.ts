@@ -59,7 +59,7 @@ export class Avalon implements Game {
             const contexts = Object.fromEntries(
               players.map(p => [p.id, buildView(p, state)])
             )
-            const result = yield* (self.discussion as any).run(
+            const result = yield* self.discussion.run(
               playerIds,
               contexts,
               { firstSpeakers: [leader.id] },

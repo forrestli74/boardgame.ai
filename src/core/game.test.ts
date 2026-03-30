@@ -10,7 +10,7 @@ class MockGame implements Game {
     return (async function* () {
       const { action } = yield {
         requests: [{ playerId: playerIds[0], view: {}, actionSchema: z.unknown() }],
-        events: [{ source: 'game' as const, gameId: 'g1', data: { type: 'started' }, timestamp: ts }],
+        events: [{ source: 'game' as const, data: { type: 'started' }, timestamp: ts }],
       }
       return { scores: { [playerIds[0]]: 1 } }
     })()

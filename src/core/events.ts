@@ -26,5 +26,8 @@ export const GameEventSchema = z.discriminatedUnion('source', [
 
 export type GameEvent = z.infer<typeof GameEventSchema>
 
+/** Distributes Omit over a union type */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+
 /** Event shape yielded by games — Engine stamps seq and gameId */
-export type GameYieldedEvent = Omit<GameEvent, 'seq' | 'gameId'> & { gameId?: string }
+export type GameYieldedEvent = DistributiveOmit<GameEvent, 'seq' | 'gameId'> & { gameId?: string }

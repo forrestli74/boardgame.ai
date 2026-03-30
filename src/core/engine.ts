@@ -1,7 +1,7 @@
 import type { Game, PlayerAction } from './game.js'
 import type { Player } from './player.js'
 import type { ActionRequest, GameOutcome } from './types.js'
-import type { GameEvent } from './events.js'
+import type { GameEvent, GameYieldedEvent } from './events.js'
 
 interface PendingResponse {
   playerId: string
@@ -22,7 +22,7 @@ export class Engine {
     this.listeners.push(listener)
   }
 
-  private emit(event: Record<string, unknown>): void {
+  private emit(event: GameYieldedEvent): void {
     this.lastSeq++
     const stamped = { seq: this.lastSeq, gameId: this.gameId, ...event } as GameEvent
     for (const fn of this.listeners) fn(stamped)
