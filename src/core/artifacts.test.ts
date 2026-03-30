@@ -30,4 +30,25 @@ describe('GameArtifacts', () => {
     const raw = await readFile(join(outputDir, 'config.json'), 'utf-8')
     expect(JSON.parse(raw)).toEqual(config)
   })
+
+  it('records game events to events.jsonl', async () => {
+    const outputDir = join(tmpDir, 'test-events')
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+
+    const event1: GameEvent = {
+      seq: 0, source: 'game', gameId: 'test',
+      data: { description: 'Game started' }, timestamp: '2026-01-01T00:00:00.000Z',
+    }
+    const event2: GameEvent = {
+      seq: 1, source: 'player', gameId: 'test', playerId: 'alice',
+      data: 'approve', timestamp: '2026-01-01T00:00:01.000Z',
+    }
+
+    artifacts.recordEvent(event1)
+    artifacts.recordEvent(event2)
+
+    const lines = (await readFile(join(outputDir, 'events.jsonl'), 'utf-8'))
+      .trim().split('\n').map(l => JSON.parse(l))
+    expect(lines).toEqual([event1, event2])
+  })
 })
