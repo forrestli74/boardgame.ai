@@ -51,4 +51,31 @@ describe('GameArtifacts', () => {
       .trim().split('\n').map(l => JSON.parse(l))
     expect(lines).toEqual([event1, event2])
   })
+
+  it('records player private events to players/{id}.jsonl', async () => {
+    const outputDir = join(tmpDir, 'test-player')
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+
+    const event1: PlayerPrivateEvent = {
+      type: 'thought',
+      data: { reasoning: 'I think bob is evil', memory: 'Round 1', action: 'approve' },
+      lastSeenSeq: 0,
+    }
+    const event2: PlayerPrivateEvent = {
+      type: 'thought',
+      data: { reasoning: 'Trust alice', memory: 'Round 1', action: 'reject' },
+      lastSeenSeq: 0,
+    }
+
+    artifacts.recordPlayerEvent('alice', event1)
+    artifacts.recordPlayerEvent('bob', event2)
+
+    const aliceLines = (await readFile(join(outputDir, 'players', 'alice.jsonl'), 'utf-8'))
+      .trim().split('\n').map(l => JSON.parse(l))
+    const bobLines = (await readFile(join(outputDir, 'players', 'bob.jsonl'), 'utf-8'))
+      .trim().split('\n').map(l => JSON.parse(l))
+
+    expect(aliceLines).toEqual([event1])
+    expect(bobLines).toEqual([event2])
+  })
 })
