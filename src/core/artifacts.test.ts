@@ -78,4 +78,19 @@ describe('GameArtifacts', () => {
     expect(aliceLines).toEqual([event1])
     expect(bobLines).toEqual([event2])
   })
+
+  it('writes outcome.json', async () => {
+    const outputDir = join(tmpDir, 'test-outcome')
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+
+    const outcome: GameOutcome = {
+      scores: { alice: 1, bob: 0 },
+      metadata: { winner: 'good' },
+    }
+
+    await artifacts.writeOutcome(outcome)
+
+    const raw = await readFile(join(outputDir, 'outcome.json'), 'utf-8')
+    expect(JSON.parse(raw)).toEqual(outcome)
+  })
 })
