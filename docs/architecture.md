@@ -13,18 +13,19 @@
      │         action (unknown)       │                 │
      │◀──────────────────────────────┤                 │
      │                                                  │
-     │            GameEvent (via onEvent listener)       │
+     │  GameEvent (stamped w/ gameId, via onEvent)       │
      ├─────────────────────────────────────────────────▶│
 ```
 
 ## Engine (`src/core/engine.ts`)
 
-Mediator. Owns the game loop.
+Mediator. Owns the game loop. Constructed with `new Engine(gameId)`.
 
-- Calls `game.play(config)` to get a generator
+- Calls `game.play(playerIds)` to get a generator via `run(game, players)`
 - Drives the generator with `.next()` — first call starts the game, subsequent calls deliver player responses
 - **Diffs requests** — each yield returns ALL current requests; engine only sends new ones (keyed by `playerId`)
 - **Passes raw actions** to the game without validation — games validate themselves
+- **Stamps `gameId`** on all events before emitting
 - Emits events via `onEvent()` listeners (e.g., Recorder for JSONL logging)
 - Stops when `pending.size === 0` (returns null) or generator completes (returns `GameOutcome`)
 
@@ -34,8 +35,9 @@ Generator-based state machine. The `play()` method is a generator that yields `G
 
 | Export | Purpose |
 |---|---|
-| `Game` | Interface — `optionsSchema` + `play(config): GameFlow` |
+| `Game` | Interface — `play(playerIds: string[]): GameFlow` |
 | `GameFlow` | `Generator<GameResponse, GameOutcome, PlayerAction>` |
+| `GameYieldedEvent` | Event type yielded by games — no `gameId`/`seq` (Engine stamps those) |
 | `PlayerAction` | `{ playerId: string; action: unknown }` — passed to generator via `.next()` |
 
 Each `yield` sends requests + events to the engine. Each `.next(playerAction)` delivers one player's raw response. The game is responsible for validating actions. Generator completion signals the game is terminal; the return value is the outcome.
@@ -50,13 +52,42 @@ Receives `ActionRequest` with `playerId`, `view` (game-specific, opaque), and `a
 
 Modular discussion system. Games delegate discussion via `yield*` to a `Discussion` implementation. Events emitted per round during discussion.
 
-- **`Discussion`** — Interface: `run(gameId, playerIds, contexts, options?)` returns `AsyncGenerator`. Per-player contexts support hidden information.
+- **`Discussion`** — Interface: `run(playerIds, contexts, options?)` returns `AsyncGenerator`. Per-player contexts support hidden information.
 - **`BroadcastDiscussion`** — Multi-round parallel broadcast. All players speak or pass each round. Configurable `maxRounds` and `prompt`. Early exit when all pass.
 - **`DiscussionStatement`** — `{ playerId, content }`. Flat ordered list of who said what.
 
 ## Recorder (`src/core/recorder.ts`)
 
 JSONL writer backed by Pino. Sync mode for predictable ordering.
+
+## GameArtifacts (`src/core/artifacts.ts`)
+
+Organizes all game run outputs into a directory. Creates the directory structure, writes `config.json` on creation, records events and player traces during the game, and writes the outcome after.
+
+### Output directory layout
+
+```
+{outputDir}/
+  config.json          # Game config snapshot
+  events.jsonl         # All GameEvents (sync append)
+  outcome.json         # GameOutcome (written after game ends)
+  players/
+    {playerId}.jsonl   # PlayerPrivateEvent per turn
+```
+
+## runGame (`src/core/run-game.ts`)
+
+Single entry point for running a game with artifact collection. Creates Engine, GameArtifacts, wires event listeners, runs the game, writes the outcome.
+
+```typescript
+const result = await runGame({
+  gameId: 'avalon-1',
+  game: new Avalon({ seed: 42 }),
+  players: [new LLMPlayer('alice', 'Alice', { persona: '...' }), ...],
+  outputDir: './output/avalon-1',
+})
+// result.outcome, result.outputDir
+```
 
 ## Concurrency
 
@@ -70,7 +101,7 @@ JSONL writer backed by Pino. Sync mode for predictable ordering.
 
 LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript, it feeds a markdown rules document to an LLM and asks it to manage game state.
 
-- **`ai-game.ts`** — `AIGame` implements `Game`. Constructor takes `rulesDoc` + optional `model` string (default: `'google:gemini-2.5-flash'`). Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
+- **`ai-game.ts`** — `AIGame` implements `Game`. Constructor takes `rulesDoc` + `{ gameId, seed, model?, gameOptions? }`. Uses Vercel AI SDK `generateText()` with forced tool use for structured output.
 - **`prompts.ts`** — System prompt and message builders for game master LLM calls.
 - **`schemas.ts`** — `LLMGameResponseSchema` (Zod) + `jsonSchemaToZod` converter (LLM produces JSON Schema for action validation; this converts it back to Zod at runtime).
 
@@ -79,7 +110,7 @@ LLM-powered Game implementation. Instead of hard-coding game rules in TypeScript
 Native Game implementation for The Resistance: Avalon. Deterministic game logic — no LLMs.
 
 - **`types.ts`** — Types, Zod schemas, lookup tables (team counts, quest configs, role configs), `assignRoles()`, `buildView()`
-- **`avalon.ts`** — `Avalon` implements `Game`. Generator-based: team proposal → vote → quest → assassination.
+- **`avalon.ts`** — `Avalon` implements `Game`. Constructor takes `{ seed?, discussion? }`. Generator-based: team proposal → vote → quest → assassination.
 - **`avalon.test.ts`** — Deterministic tests with `scriptedPlayers` helper.
 
 ## LLM Player (`src/players/llm-player.ts`)
@@ -107,6 +138,8 @@ src/
 │   ├── player.ts             # Player interface
 │   ├── events.ts             # GameEvent discriminated union
 │   ├── recorder.ts           # JSONL writer via Pino
+│   ├── artifacts.ts          # GameArtifacts — output directory + JSONL files
+│   ├── run-game.ts           # runGame() free function
 │   ├── llm-registry.ts       # Provider registry (AI SDK)
 │   └── *.test.ts             # Co-located tests
 │

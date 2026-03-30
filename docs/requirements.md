@@ -68,6 +68,6 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 |-------|-------------|--------|
 | 1. Data Model | FRAME-01–03, DATA-01–03 | Complete |
 | 2. Avalon Rules | AVLN-01–08, RAND-01 | Complete |
-| 3. LLM Agents | AGENT-01–05, DISC-01–02 | Pending |
+| 3. LLM Agents | AGENT-01–05, DISC-01–02 | Complete |
 | 4. CLI Runner | EXEC-01, DATA-04 | Pending |
 | 5. Batch Mode | EXEC-02–03 | Pending |
