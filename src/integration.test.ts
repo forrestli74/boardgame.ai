@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
 import type { Game, GameFlow } from './core/game.js'
 import type { Player } from './core/player.js'
-import type { GameConfig, GameResponse, GameOutcome, ActionRequest } from './core/types.js'
-import type { GameEvent } from './core/events.js'
+import type { ActionRequest } from './core/types.js'
+import type { GameYieldedEvent } from './core/events.js'
 import { Engine } from './core/engine.js'
 import { Recorder } from './core/recorder.js'
 
@@ -12,25 +12,23 @@ import { Recorder } from './core/recorder.js'
 // After 3 rounds, player with most round wins takes it.
 
 const GuessSchema = z.number().int().min(1).max(10)
-const OptionsSchema = z.object({ rounds: z.number().int().default(3) })
 
 class GuessingGame implements Game {
-  readonly optionsSchema = OptionsSchema
+  constructor(private readonly rounds: number = 3) {}
 
-  play(config: GameConfig): GameFlow {
-    const players = config.players.map(p => p.id)
-    const opts = OptionsSchema.parse(config.options ?? {})
-    const maxRounds = opts.rounds
+  play(playerIds: string[]): GameFlow {
+    const players = playerIds
+    const maxRounds = this.rounds
     const targets = [7, 3, 9]
     const wins: Record<string, number> = {}
     players.forEach(id => { wins[id] = 0 })
 
-    const gameEvent = (data: unknown): GameEvent => ({
-      source: 'game', gameId: config.gameId, data, timestamp: new Date().toISOString(),
+    const gameEvent = (data: unknown): GameYieldedEvent => ({
+      source: 'game', data, timestamp: new Date().toISOString(),
     })
 
     return (async function* () {
-      let pendingEvents: GameEvent[] = [gameEvent({ type: 'start', players })]
+      let pendingEvents: GameYieldedEvent[] = [gameEvent({ type: 'start', players })]
 
       for (let round = 0; round < maxRounds; round++) {
         // Request guesses from all players, include any pending events
@@ -48,7 +46,7 @@ class GuessingGame implements Game {
 
         // Collect remaining guesses
         while (Object.keys(guesses).length < players.length) {
-          const { playerId, action } = yield { requests: [], events: [] }
+          const { playerId, action } = yield { requests: [], events: [] as GameYieldedEvent[] }
           guesses[playerId] = action as number
         }
 
@@ -101,18 +99,9 @@ describe('integration: full game loop', () => {
       ['bob', new FixedPlayer('bob', 'Bob', [4, 3, 10])],
     ])
 
-    const config: GameConfig = {
-      gameId: 'test-game-1',
-      seed: 42,
-      players: [
-        { id: 'alice', name: 'Alice' },
-        { id: 'bob', name: 'Bob' },
-      ],
-    }
-
-    const engine = new Engine()
+    const engine = new Engine('test-game-1')
     engine.onEvent((e) => recorder.record(e))
-    const outcome = await engine.run(game, players, config)
+    const outcome = await engine.run(game, players)
     recorder.flush()
 
     // Outcome should exist with scores
