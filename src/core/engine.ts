@@ -1,7 +1,7 @@
 import type { Game, PlayerAction } from './game.js'
 import type { Player } from './player.js'
 import type { ActionRequest, GameOutcome } from './types.js'
-import type { GameEvent, GameYieldedEvent } from './events.js'
+import type { GameEvent } from './events.js'
 
 interface PendingResponse {
   playerId: string
@@ -22,10 +22,30 @@ export class Engine {
     this.listeners.push(listener)
   }
 
-  private emit(event: GameYieldedEvent): void {
+  private emitGameEvent(data: unknown): void {
     this.lastSeq++
-    const stamped = { seq: this.lastSeq, gameId: this.gameId, ...event } as GameEvent
-    for (const fn of this.listeners) fn(stamped)
+    const event: GameEvent = {
+      seq: this.lastSeq,
+      source: 'game',
+      gameId: this.gameId,
+      data,
+      timestamp: new Date().toISOString(),
+    }
+    for (const fn of this.listeners) fn(event)
+  }
+
+  private emitPlayerEvent(playerId: string, action: unknown, lastSeenSeq?: number): void {
+    this.lastSeq++
+    const event: GameEvent = {
+      seq: this.lastSeq,
+      source: 'player',
+      gameId: this.gameId,
+      playerId,
+      lastSeenSeq,
+      data: action,
+      timestamp: new Date().toISOString(),
+    }
+    for (const fn of this.listeners) fn(event)
   }
 
   async run(game: Game, players: Map<string, Player>): Promise<GameOutcome | null> {
@@ -36,8 +56,8 @@ export class Engine {
     let result = await gen.next()
     while (!result.done) {
       const { requests, events } = result.value
-      for (const event of events) {
-        this.emit(event)
+      for (const eventData of events) {
+        this.emitGameEvent(eventData)
       }
 
       for (const req of requests) {
@@ -55,13 +75,7 @@ export class Engine {
       const response = await Promise.race(pending.values())
       pending.delete(response.playerId)
 
-      this.emit({
-        source: 'player',
-        playerId: response.playerId,
-        lastSeenSeq: response.request.lastSeenSeq,
-        data: response.action,
-        timestamp: new Date().toISOString(),
-      })
+      this.emitPlayerEvent(response.playerId, response.action, response.request.lastSeenSeq)
 
       result = await gen.next({ playerId: response.playerId, action: response.action })
     }

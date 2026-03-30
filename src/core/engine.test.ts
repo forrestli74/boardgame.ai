@@ -3,9 +3,8 @@ import { z } from 'zod'
 import { Engine } from './engine.js'
 import type { Game, GameFlow } from './game.js'
 import type { Player } from './player.js'
-import type { ActionRequest, GameResponse, GameOutcome } from './types.js'
+import type { ActionRequest, GameOutcome } from './types.js'
 
-const ts = '2026-01-01T00:00:00.000Z'
 
 function makeRequest(playerId: string): ActionRequest {
   return { playerId, view: {}, actionSchema: z.object({ move: z.string() }) }
@@ -107,19 +106,18 @@ describe('Engine', () => {
     )
   })
 
-  it('emits game events from yielded events', async () => {
+  it('emits game events from yielded event data', async () => {
     const onEvent = vi.fn()
     const player: Player = {
       id: 'p1', name: 'Alice',
       act: vi.fn().mockResolvedValue({ move: 'go' }),
     }
-    const schema = z.object({ move: z.string() })
 
     const game: Game = {
       async *play() {
         yield {
-          requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
-          events: [{ source: 'game' as const, data: { type: 'init' }, timestamp: ts }],
+          requests: [makeRequest('p1')],
+          events: [{ type: 'init' }],
         }
         return { scores: {} }
       },
@@ -129,7 +127,7 @@ describe('Engine', () => {
     engine.onEvent(onEvent)
     await engine.run(game, new Map([['p1', player]]))
     expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'game', gameId: 'g1' })
+      expect.objectContaining({ source: 'game', gameId: 'g1', data: { type: 'init' } })
     )
   })
 
