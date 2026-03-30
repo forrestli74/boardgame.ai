@@ -32,7 +32,7 @@ export async function runGame(options: RunGameOptions): Promise<GameResult> {
   engine.onEvent((event) => artifacts.recordEvent(event))
   for (const player of players) {
     if (player.onEvent) {
-      player.onEvent((event) => artifacts.recordPlayerEvent(player.id, event))
+      player.onEvent((data) => artifacts.recordPlayerEvent(player.id, data))
     }
   }
 

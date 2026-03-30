@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { z } from 'zod'
 import { runGame } from './run-game.js'
 import type { Game } from './game.js'
-import type { Player, PlayerPrivateEvent } from './player.js'
+import type { Player } from './player.js'
 
 describe('runGame', () => {
   let tmpDir: string
@@ -48,7 +48,7 @@ describe('runGame', () => {
             view: 'your turn',
             actionSchema: z.literal('yes'),
           })),
-          events: [{ source: 'game' as const, data: { type: 'start' }, timestamp: new Date().toISOString() }],
+          events: [{ type: 'start' }],
         }
         yield { requests: [], events: [] }
         return { scores: Object.fromEntries(playerIds.map(id => [id, 1])) }
@@ -56,16 +56,14 @@ describe('runGame', () => {
     }
 
     const makeMockPlayer = (id: string): Player => {
-      const listeners: ((event: PlayerPrivateEvent) => void)[] = []
+      const listeners: ((data: unknown) => void)[] = []
       return {
         id,
         name: id.charAt(0).toUpperCase() + id.slice(1),
         async act() {
-          const event: PlayerPrivateEvent = {
-            type: 'thought',
-            data: { reasoning: `${id} thinking`, memory: '', action: 'yes' },
+          for (const fn of listeners) {
+            fn({ reasoning: `${id} thinking`, memory: '', action: 'yes' })
           }
-          for (const fn of listeners) fn(event)
           return 'yes'
         },
         onEvent(listener) { listeners.push(listener) },
@@ -111,6 +109,6 @@ describe('runGame', () => {
     const aliceLog = (await readFile(join(outputDir, 'players', 'alice.jsonl'), 'utf-8'))
       .trim().split('\n').map(l => JSON.parse(l))
     expect(aliceLog.length).toBe(1)
-    expect(aliceLog[0].data.reasoning).toBe('alice thinking')
+    expect(aliceLog[0].reasoning).toBe('alice thinking')
   })
 })
