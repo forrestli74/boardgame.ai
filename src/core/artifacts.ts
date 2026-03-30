@@ -2,7 +2,6 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import type { GameEvent } from './events.js'
-import type { PlayerPrivateEvent } from './player.js'
 import type { GameOutcome } from './types.js'
 
 export interface ArtifactConfig {
@@ -30,10 +29,10 @@ export class GameArtifacts {
     appendFileSync(this.eventsPath, JSON.stringify(event) + '\n')
   }
 
-  recordPlayerEvent(playerId: string, event: PlayerPrivateEvent): void {
+  recordPlayerEvent(playerId: string, data: unknown): void {
     const safe = basename(playerId)
     const playerPath = join(this.outputDir, 'players', `${safe}.jsonl`)
-    appendFileSync(playerPath, JSON.stringify(event) + '\n')
+    appendFileSync(playerPath, JSON.stringify(data) + '\n')
   }
 
   async writeOutcome(outcome: GameOutcome): Promise<void> {
