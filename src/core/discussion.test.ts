@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
 import { Engine } from './engine.js'
 import { scriptedPlayers } from '../test-utils/scripted-players.js'
 import type { Game, GameFlow, PlayerAction } from './game.js'
-import type { GameConfig, GameOutcome } from './types.js'
 import type { GameEvent } from './events.js'
 import {
   DiscussionStatementSchema,
@@ -44,20 +42,15 @@ function discussionGame(
   options?: { firstSpeakers?: string[] },
 ): Game {
   return {
-    optionsSchema: z.object({}),
-    play(config: GameConfig): GameFlow {
+    play(_pIds: string[]): GameFlow {
       return (async function* () {
         const ctxs = contexts ?? Object.fromEntries(playerIds.map(id => [id, { info: 'test' }]))
-        const result: DiscussionResult = yield* discussion.run(config.gameId, playerIds, ctxs, options)
+        const result: DiscussionResult = yield* discussion.run(playerIds, ctxs, options)
         // Emit any pending events from the last round as metadata
         return { scores: {}, metadata: { discussion: result } }
       })() as GameFlow
     },
   }
-}
-
-function makeConfig(playerIds: string[]): GameConfig {
-  return { gameId: 'test-game', seed: 0, players: playerIds.map(id => ({ id, name: id })) }
 }
 
 // ---- BroadcastDiscussion tests ----
@@ -67,7 +60,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(1)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
     const events: GameEvent[] = []
     engine.onEvent(e => events.push(e))
 
@@ -76,7 +69,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', { statement: 'I agree with alice' }],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = (outcome!.metadata!.discussion as DiscussionResult)
@@ -100,7 +93,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(2)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
     const events: GameEvent[] = []
     engine.onEvent(e => events.push(e))
 
@@ -113,7 +106,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', { statement: 'round 2 bob' }],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = (outcome!.metadata!.discussion as DiscussionResult)
@@ -137,7 +130,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(3)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
 
     // Bob passes round 1, speaks round 2, passes round 3
     const players = scriptedPlayers([
@@ -152,7 +145,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', { statement: '' }],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = outcome!.metadata!.discussion as DiscussionResult
@@ -169,7 +162,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(5)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
 
     // Both speak round 1, both pass round 2
     const players = scriptedPlayers([
@@ -181,7 +174,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', { statement: '' }],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = outcome!.metadata!.discussion as DiscussionResult
@@ -196,7 +189,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(3)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
 
     // Both pass immediately in round 1
     const players = scriptedPlayers([
@@ -204,7 +197,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', { statement: '' }],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = outcome!.metadata!.discussion as DiscussionResult
@@ -215,7 +208,7 @@ describe('BroadcastDiscussion', () => {
     const discussion = new BroadcastDiscussion(1)
     const playerIds = ['alice', 'bob']
     const game = discussionGame(discussion, playerIds)
-    const engine = new Engine()
+    const engine = new Engine('test-game')
     const events: GameEvent[] = []
     engine.onEvent(e => events.push(e))
 
@@ -225,7 +218,7 @@ describe('BroadcastDiscussion', () => {
       ['bob', 42],
     ])
 
-    const outcome = await engine.run(game, players, makeConfig(playerIds))
+    const outcome = await engine.run(game, players)
     expect(outcome).not.toBeNull()
 
     const result = outcome!.metadata!.discussion as DiscussionResult
@@ -241,11 +234,10 @@ describe('BroadcastDiscussion', () => {
     let capturedRequestOrder: string[] = []
 
     const game: Game = {
-      optionsSchema: z.object({}),
-      play(config: GameConfig): GameFlow {
+      play(_pIds: string[]): GameFlow {
         return (async function* () {
           const contexts = Object.fromEntries(playerIds.map(id => [id, {}]))
-          const gen = discussion.run(config.gameId, playerIds, contexts, { firstSpeakers: ['charlie', 'bob'] })
+          const gen = discussion.run(playerIds, contexts, { firstSpeakers: ['charlie', 'bob'] })
           let step = await gen.next()
           while (!step.done) {
             if (step.value.requests.length > 0) {
@@ -265,7 +257,7 @@ describe('BroadcastDiscussion', () => {
       ['charlie', { statement: 'yo' }],
     ])
 
-    await engine_run(game, players, makeConfig(playerIds))
+    await engine_run(game, players)
     expect(capturedRequestOrder[0]).toBe('charlie')
     expect(capturedRequestOrder[1]).toBe('bob')
     expect(capturedRequestOrder[2]).toBe('alice')
@@ -273,7 +265,7 @@ describe('BroadcastDiscussion', () => {
 })
 
 // Helper to run engine without tracking events
-async function engine_run(game: Game, players: Map<string, any>, config: GameConfig) {
-  const engine = new Engine()
-  return engine.run(game, players, config)
+async function engine_run(game: Game, players: Map<string, any>) {
+  const engine = new Engine('test-game')
+  return engine.run(game, players)
 }
