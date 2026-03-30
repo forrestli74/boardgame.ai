@@ -25,3 +25,6 @@ export const GameEventSchema = z.discriminatedUnion('source', [
 ])
 
 export type GameEvent = z.infer<typeof GameEventSchema>
+
+/** Event shape yielded by games — Engine stamps seq and gameId */
+export type GameYieldedEvent = Omit<GameEvent, 'seq' | 'gameId'> & { gameId?: string }
