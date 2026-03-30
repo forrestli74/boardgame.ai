@@ -1,8 +1,8 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Game, GameFlow } from '../../core/game.js'
-import type { GameConfig, GameOutcome, ActionRequest } from '../../core/types.js'
-import type { GameEvent } from '../../core/events.js'
+import type { GameOutcome, ActionRequest } from '../../core/types.js'
+import type { GameYieldedEvent } from '../../core/events.js'
 import { registry, DEFAULT_MODEL } from '../../core/llm-registry.js'
 import { LLMGameResponseSchema, parseState, parseEventData, scoresToRecord } from './schemas.js'
 import type { LLMGameResponse } from './schemas.js'
@@ -11,25 +11,28 @@ import { buildSystemPrompt, buildInitMessage, buildActionMessage, buildBatchActi
 const TextSchema = z.string()
 
 export class AIGame implements Game {
-  readonly optionsSchema = z.object({})
-
   constructor(
     private readonly rulesDoc: string,
-    private readonly model: string = DEFAULT_MODEL,
+    private readonly options: { gameId: string; seed: number; model?: string; gameOptions?: unknown } = { gameId: 'ai-game', seed: 0 },
   ) {}
 
-  play(config: GameConfig): GameFlow {
+  play(playerIds: string[]): GameFlow {
     const self = this
     return (async function* () {
-      const gameId = config.gameId
       const systemPrompt = buildSystemPrompt()
 
       // Init: call LLM to set up the game
-      const initMessage = buildInitMessage(self.rulesDoc, config)
+      const initMessage = buildInitMessage({
+        rulesDoc: self.rulesDoc,
+        gameId: self.options.gameId,
+        seed: self.options.seed,
+        playerIds,
+        options: self.options.gameOptions,
+      })
       const initRaw = await self.callLLM(systemPrompt, initMessage)
       const initParsed = LLMGameResponseSchema.parse(initRaw)
       let state = parseState(initParsed.state)
-      let { requests, events } = self.processLLMResponse(initParsed, gameId)
+      let { requests, events } = self.processLLMResponse(initParsed)
 
       if (initParsed.isTerminal) {
         return initParsed.outcome
@@ -63,7 +66,7 @@ export class AIGame implements Game {
         const raw = await self.callLLM(systemPrompt, userMessage)
         const parsed = LLMGameResponseSchema.parse(raw)
         state = parseState(parsed.state)
-        const response = self.processLLMResponse(parsed, gameId)
+        const response = self.processLLMResponse(parsed)
 
         if (parsed.isTerminal) {
           return parsed.outcome
@@ -83,9 +86,10 @@ export class AIGame implements Game {
   }
 
   private async callLLM(systemPrompt: string, userMessage: string): Promise<unknown> {
+    const model = this.options.model ?? DEFAULT_MODEL
     for (let attempt = 0; attempt < 3; attempt++) {
       const result = await generateText({
-        model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
+        model: registry.languageModel(model as Parameters<typeof registry.languageModel>[0]),
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
         maxOutputTokens: 16384,
@@ -107,7 +111,7 @@ export class AIGame implements Game {
     throw new Error('LLM returned no tool call after 3 attempts')
   }
 
-  private processLLMResponse(llmResponse: LLMGameResponse, gameId: string): { requests: ActionRequest[]; events: GameEvent[] } {
+  private processLLMResponse(llmResponse: LLMGameResponse): { requests: ActionRequest[]; events: GameYieldedEvent[] } {
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
       view: req.prompt,
@@ -115,11 +119,10 @@ export class AIGame implements Game {
     }))
 
     const timestamp = new Date().toISOString()
-    const events: GameEvent[] = llmResponse.events.map((evt) => {
+    const events: GameYieldedEvent[] = llmResponse.events.map((evt) => {
       const data = parseEventData(evt.data)
       return {
         source: 'game' as const,
-        gameId,
         data: { description: evt.description, ...((data && typeof data === 'object') ? data as Record<string, unknown> : { value: data }) },
         timestamp,
       }

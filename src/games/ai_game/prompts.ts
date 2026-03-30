@@ -1,5 +1,3 @@
-import type { GameConfig } from '../../core/types.js'
-
 /**
  * System prompt instructing the LLM to act as a rules-faithful game master.
  */
@@ -25,28 +23,36 @@ Output format:
 - Scoring convention: winners receive score 1, losers receive score 0.`
 }
 
+export interface InitMessageOptions {
+  rulesDoc: string
+  gameId: string
+  seed: number
+  playerIds: string[]
+  options?: unknown
+}
+
 /**
  * User message for game initialization.
  * Includes the full rules document, player list, and seed.
  */
-export function buildInitMessage(rulesDoc: string, config: GameConfig): string {
-  const playerList = config.players
-    .map((p) => `  - id: "${p.id}", name: "${p.name}"`)
+export function buildInitMessage(opts: InitMessageOptions): string {
+  const playerList = opts.playerIds
+    .map((id) => `  - id: "${id}"`)
     .join('\n')
 
   return `Initialize a new game.
 
 ## Rules Document
 
-${rulesDoc}
+${opts.rulesDoc}
 
 ## Game Configuration
 
-Game ID: ${config.gameId}
-Seed: ${config.seed}
+Game ID: ${opts.gameId}
+Seed: ${opts.seed}
 Players:
 ${playerList}
-${config.options !== undefined ? `\nOptions: ${JSON.stringify(config.options)}` : ''}
+${opts.options !== undefined ? `\nOptions: ${JSON.stringify(opts.options)}` : ''}
 
 ## Instructions
 
