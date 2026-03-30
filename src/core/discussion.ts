@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import type { GameResponse } from './types.js'
-import type { GameYieldedEvent } from './events.js'
 import type { ActionRequest } from './types.js'
 import type { PlayerAction } from './game.js'
 
@@ -11,7 +10,7 @@ export interface DiscussionStatement {
 
 export interface DiscussionResult {
   statements: DiscussionStatement[]
-  pendingEvents: GameYieldedEvent[]
+  pendingEvents: unknown[]
 }
 
 export interface DiscussionOptions {
@@ -30,10 +29,6 @@ export const DiscussionStatementSchema = z.object({
   statement: z.string().describe('Your statement to the group. Pass with empty string unless you have something to add.'),
 })
 
-function event(data: unknown): GameYieldedEvent {
-  return { source: 'game', data, timestamp: new Date().toISOString() }
-}
-
 const DEFAULT_PROMPT = `Share your thoughts with the group. Keep it short and direct. Address specific players when you have something to say to them.`
 
 export class BroadcastDiscussion implements Discussion {
@@ -50,7 +45,7 @@ export class BroadcastDiscussion implements Discussion {
   ): AsyncGenerator<GameResponse, DiscussionResult, PlayerAction> {
     const allStatements: DiscussionStatement[] = []
     const previousStatements: { playerId: string; content: string }[] = []
-    let pendingEvents: GameYieldedEvent[] = []
+    let pendingEvents: unknown[] = []
 
     // Determine player order, with firstSpeakers at the front
     let activePlayers = [...playerIds]
@@ -82,7 +77,7 @@ export class BroadcastDiscussion implements Discussion {
       pendingEvents = []
       let firstParsed = DiscussionStatementSchema.safeParse(firstAction.action)
       if (!firstParsed.success) {
-        pendingEvents.push(event({ type: 'validation-failed', playerId: firstAction.playerId, raw: firstAction.action }))
+        pendingEvents.push({ type: 'validation-failed', playerId: firstAction.playerId, raw: firstAction.action })
         firstParsed = { success: true, data: { statement: '' } } as any
       }
       roundStatements.push({ playerId: firstAction.playerId, content: firstParsed.data!.statement })
@@ -91,7 +86,7 @@ export class BroadcastDiscussion implements Discussion {
         const action: PlayerAction = yield { requests: [], events: [] }
         let parsed = DiscussionStatementSchema.safeParse(action.action)
         if (!parsed.success) {
-          pendingEvents.push(event({ type: 'validation-failed', playerId: action.playerId, raw: action.action }))
+          pendingEvents.push({ type: 'validation-failed', playerId: action.playerId, raw: action.action })
           parsed = { success: true, data: { statement: '' } } as any
         }
         roundStatements.push({ playerId: action.playerId, content: parsed.data!.statement })
@@ -108,13 +103,11 @@ export class BroadcastDiscussion implements Discussion {
       }
 
       // Store round event to carry forward — will be emitted with next round's requests
-      pendingEvents = [
-        event({
-          type: 'discussion-round',
-          round,
-          statements: roundStatements.filter(s => s.content !== ''),
-        }),
-      ]
+      pendingEvents = [{
+        type: 'discussion-round',
+        round,
+        statements: roundStatements.filter(s => s.content !== ''),
+      }]
 
       // Early exit: all players passed this round
       if (allPassed) break
