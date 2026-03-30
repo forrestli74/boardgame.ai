@@ -3,14 +3,12 @@ import { z } from 'zod'
 import type { Game, GameFlow } from './game.js'
 import type { GameResponse, GameOutcome } from './types.js'
 
-const ts = '2026-01-01T00:00:00.000Z'
-
 class MockGame implements Game {
   play(playerIds: string[]): GameFlow {
     return (async function* () {
       const { action } = yield {
         requests: [{ playerId: playerIds[0], view: {}, actionSchema: z.unknown() }],
-        events: [{ source: 'game' as const, data: { type: 'started' }, timestamp: ts }],
+        events: [{ type: 'started' }],
       }
       return { scores: { [playerIds[0]]: 1 } }
     })()

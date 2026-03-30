@@ -153,9 +153,7 @@ describe('AIGame', () => {
       const response = await nextResponse(gm.play(players2))
 
       expect(response.events).toHaveLength(1)
-      expect(response.events[0].source).toBe('game')
-      expect(response.events[0]).toHaveProperty('timestamp')
-      expect(response.events[0].data).toMatchObject({ description: 'Game started', type: 'game_start' })
+      expect(response.events[0]).toMatchObject({ description: 'Game started', type: 'game_start' })
     })
 
     it('calls generateText with correct arguments', async () => {
@@ -208,13 +206,13 @@ describe('AIGame', () => {
     it('handles primitive event data by wrapping in value key', async () => {
       mockLLMResponse({ ...makeInitResponse(), events: [{ description: 'Score update', data: '42' }] })
       const response = await nextResponse(new AIGame(rulesDoc, { gameId: 'test-game-1', seed: 42 }).play(players2))
-      expect(response.events[0].data).toEqual({ description: 'Score update', value: 42 })
+      expect(response.events[0]).toEqual({ description: 'Score update', value: 42 })
     })
 
     it('handles null event data', async () => {
       mockLLMResponse({ ...makeInitResponse(), events: [{ description: 'Null event', data: 'null' }] })
       const response = await nextResponse(new AIGame(rulesDoc, { gameId: 'test-game-1', seed: 42 }).play(players2))
-      expect(response.events[0].data).toEqual({ description: 'Null event', value: null })
+      expect(response.events[0]).toEqual({ description: 'Null event', value: null })
     })
   })
 

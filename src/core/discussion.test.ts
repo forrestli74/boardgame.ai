@@ -83,10 +83,10 @@ describe('BroadcastDiscussion', () => {
 
     // The last round's event is in pendingEvents (not yet emitted by engine)
     expect(result.pendingEvents).toHaveLength(1)
-    const roundEvent = result.pendingEvents[0]
-    expect((roundEvent.data as any).type).toBe('discussion-round')
-    expect((roundEvent.data as any).round).toBe(0)
-    expect((roundEvent.data as any).statements).toHaveLength(2)
+    const roundEvent = result.pendingEvents[0] as any
+    expect(roundEvent.type).toBe('discussion-round')
+    expect(roundEvent.round).toBe(0)
+    expect(roundEvent.statements).toHaveLength(2)
   })
 
   it('two rounds — round 1 event emitted, round 2 event in pendingEvents', async () => {
@@ -121,9 +121,9 @@ describe('BroadcastDiscussion', () => {
 
     // Round 2 event is in pendingEvents (last round, not emitted by engine)
     expect(result.pendingEvents).toHaveLength(1)
-    const round2Event = result.pendingEvents[0]
-    expect((round2Event.data as any).type).toBe('discussion-round')
-    expect((round2Event.data as any).round).toBe(1)
+    const round2Event = result.pendingEvents[0] as any
+    expect(round2Event.type).toBe('discussion-round')
+    expect(round2Event.round).toBe(1)
   })
 
   it('passing does not drop player — they can speak in later rounds', async () => {

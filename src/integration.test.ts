@@ -4,7 +4,6 @@ import { readFileSync, unlinkSync, existsSync } from 'fs'
 import type { Game, GameFlow } from './core/game.js'
 import type { Player } from './core/player.js'
 import type { ActionRequest } from './core/types.js'
-import type { GameYieldedEvent } from './core/events.js'
 import { Engine } from './core/engine.js'
 import { Recorder } from './core/recorder.js'
 
@@ -23,12 +22,8 @@ class GuessingGame implements Game {
     const wins: Record<string, number> = {}
     players.forEach(id => { wins[id] = 0 })
 
-    const gameEvent = (data: unknown): GameYieldedEvent => ({
-      source: 'game', data, timestamp: new Date().toISOString(),
-    })
-
     return (async function* () {
-      let pendingEvents: GameYieldedEvent[] = [gameEvent({ type: 'start', players })]
+      let pendingEvents: unknown[] = [{ type: 'start', players }]
 
       for (let round = 0; round < maxRounds; round++) {
         // Request guesses from all players, include any pending events
@@ -46,7 +41,7 @@ class GuessingGame implements Game {
 
         // Collect remaining guesses
         while (Object.keys(guesses).length < players.length) {
-          const { playerId, action } = yield { requests: [], events: [] as GameYieldedEvent[] }
+          const { playerId, action } = yield { requests: [], events: [] }
           guesses[playerId] = action as number
         }
 
@@ -61,7 +56,7 @@ class GuessingGame implements Game {
         wins[winner]++
 
         // Queue round-result event for next yield (or discard on last round — outcome captures it)
-        pendingEvents = [gameEvent({ type: 'round-result', round: round + 1, target, guesses, winner })]
+        pendingEvents = [{ type: 'round-result', round: round + 1, target, guesses, winner }]
       }
 
       return { scores: { ...wins } }

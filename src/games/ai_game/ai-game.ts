@@ -2,7 +2,6 @@ import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Game, GameFlow } from '../../core/game.js'
 import type { GameOutcome, ActionRequest } from '../../core/types.js'
-import type { GameYieldedEvent } from '../../core/events.js'
 import { registry, DEFAULT_MODEL } from '../../core/llm-registry.js'
 import { LLMGameResponseSchema, parseState, parseEventData, scoresToRecord } from './schemas.js'
 import type { LLMGameResponse } from './schemas.js'
@@ -111,21 +110,16 @@ export class AIGame implements Game {
     throw new Error('LLM returned no tool call after 3 attempts')
   }
 
-  private processLLMResponse(llmResponse: LLMGameResponse): { requests: ActionRequest[]; events: GameYieldedEvent[] } {
+  private processLLMResponse(llmResponse: LLMGameResponse): { requests: ActionRequest[]; events: unknown[] } {
     const requests: ActionRequest[] = llmResponse.requests.map((req) => ({
       playerId: req.playerId,
       view: req.prompt,
       actionSchema: TextSchema,
     }))
 
-    const timestamp = new Date().toISOString()
-    const events: GameYieldedEvent[] = llmResponse.events.map((evt) => {
+    const events: unknown[] = llmResponse.events.map((evt) => {
       const data = parseEventData(evt.data)
-      return {
-        source: 'game' as const,
-        data: { description: evt.description, ...((data && typeof data === 'object') ? data as Record<string, unknown> : { value: data }) },
-        timestamp,
-      }
+      return { description: evt.description, ...((data && typeof data === 'object') ? data as Record<string, unknown> : { value: data }) }
     })
 
     return { requests, events }

@@ -177,8 +177,9 @@ describe('LLMPlayer', () => {
 
     expect(listener).toHaveBeenCalledOnce()
     expect(listener).toHaveBeenCalledWith({
-      type: 'thought',
-      data: { reasoning: 'my reasoning', memory: 'my memory', action: { position: 5 } },
+      reasoning: 'my reasoning',
+      memory: 'my memory',
+      action: { position: 5 },
       lastSeenSeq: undefined,
     })
   })
