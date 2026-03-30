@@ -24,7 +24,7 @@ describe('Recorder', () => {
 
   it('record writes a JSONL line to the output file', () => {
     const recorder = new Recorder('g1', filePath)
-    const event: GameEvent = { source: 'game', gameId: 'g1', data: { type: 'start' }, timestamp: ts }
+    const event: GameEvent = { seq: 0, source: 'game', gameId: 'g1', data: { type: 'start' }, timestamp: ts }
     recorder.record(event)
     recorder.flush()
     const contents = readFileSync(filePath, 'utf8').trim()
@@ -33,7 +33,7 @@ describe('Recorder', () => {
 
   it('each JSONL line is valid JSON when parsed', () => {
     const recorder = new Recorder('g1', filePath)
-    const event: GameEvent = { source: 'game', gameId: 'g1', data: {}, timestamp: ts }
+    const event: GameEvent = { seq: 0, source: 'game', gameId: 'g1', data: {}, timestamp: ts }
     recorder.record(event)
     recorder.flush()
     const line = readFileSync(filePath, 'utf8').trim().split('\n')[0]
@@ -42,7 +42,7 @@ describe('Recorder', () => {
 
   it('each JSONL line contains gameId field', () => {
     const recorder = new Recorder('g1', filePath)
-    const event: GameEvent = { source: 'game', gameId: 'g1', data: {}, timestamp: ts }
+    const event: GameEvent = { seq: 0, source: 'game', gameId: 'g1', data: {}, timestamp: ts }
     recorder.record(event)
     recorder.flush()
     const line = readFileSync(filePath, 'utf8').trim().split('\n')[0]
@@ -52,8 +52,8 @@ describe('Recorder', () => {
 
   it('multiple events produce multiple JSONL lines', () => {
     const recorder = new Recorder('g1', filePath)
-    const event1: GameEvent = { source: 'game', gameId: 'g1', data: { n: 1 }, timestamp: ts }
-    const event2: GameEvent = { source: 'player', gameId: 'g1', playerId: 'p1', data: { n: 2 }, timestamp: ts }
+    const event1: GameEvent = { seq: 0, source: 'game', gameId: 'g1', data: { n: 1 }, timestamp: ts }
+    const event2: GameEvent = { seq: 1, source: 'player', gameId: 'g1', playerId: 'p1', data: { n: 2 }, timestamp: ts }
     recorder.record(event1)
     recorder.record(event2)
     recorder.flush()
@@ -63,7 +63,7 @@ describe('Recorder', () => {
 
   it('flush ensures buffered writes are flushed to disk', () => {
     const recorder = new Recorder('g1', filePath)
-    recorder.record({ source: 'game', gameId: 'g1', data: {}, timestamp: ts })
+    recorder.record({ seq: 0, source: 'game', gameId: 'g1', data: {}, timestamp: ts })
     recorder.flush()
     const contents = readFileSync(filePath, 'utf8')
     expect(contents.length).toBeGreaterThan(0)
@@ -72,10 +72,10 @@ describe('Recorder', () => {
   it('handles both player and game events', () => {
     const recorder = new Recorder('g1', filePath)
     const playerEvent: GameEvent = {
-      source: 'player', gameId: 'g1', playerId: 'p1', data: { vote: 'yes' }, timestamp: ts,
+      seq: 0, source: 'player', gameId: 'g1', playerId: 'p1', data: { vote: 'yes' }, timestamp: ts,
     }
     const gameEvent: GameEvent = {
-      source: 'game', gameId: 'g1', data: { type: 'result' }, timestamp: ts,
+      seq: 1, source: 'game', gameId: 'g1', data: { type: 'result' }, timestamp: ts,
     }
     recorder.record(playerEvent)
     recorder.record(gameEvent)

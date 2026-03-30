@@ -145,7 +145,7 @@ export class Avalon implements Game {
         }
 
         // --- Quest Execution (parallel, team members only) ---
-        state.phase = 'quest'
+        state.phase = 'quest-vote'
         const team = players.filter(p => state.proposedTeam!.includes(p.id))
         const questRequests: ActionRequest[] = team.map(p => ({
           playerId: p.id, view: buildView(p, state), actionSchema: QuestVoteSchema,

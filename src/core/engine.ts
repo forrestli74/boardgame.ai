@@ -22,7 +22,7 @@ export class Engine {
     this.listeners.push(listener)
   }
 
-  private emit(event: Omit<GameEvent, 'seq' | 'gameId'>): void {
+  private emit(event: Record<string, unknown>): void {
     this.lastSeq++
     const stamped = { seq: this.lastSeq, gameId: this.gameId, ...event } as GameEvent
     for (const fn of this.listeners) fn(stamped)

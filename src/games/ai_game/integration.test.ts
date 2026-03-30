@@ -3,7 +3,7 @@ import { readFileSync, unlinkSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import type { Player } from '../../core/player.js'
-import type { ActionRequest, GameConfig } from '../../core/types.js'
+import type { ActionRequest } from '../../core/types.js'
 import { Recorder } from '../../core/recorder.js'
 import { AIGame } from './ai-game.js'
 import { Engine } from '../../core/engine.js'
@@ -43,7 +43,7 @@ describe.skipIf(SKIP)('integration: AI Game', () => {
   it('plays tic-tac-toe to completion', async () => {
     await useHttpRecording()
     const rulesDoc = readFileSync(RULES_PATH, 'utf-8')
-    const game = new AIGame(rulesDoc)
+    const game = new AIGame(rulesDoc, { gameId: 'ttt-integration-1', seed: 42 })
     const recorder = new Recorder('ttt-integration-1', LOG_FILE)
 
     // X plays diagonal: (0,0), (1,1), (2,2) -- wins if O doesn't block
@@ -60,18 +60,9 @@ describe.skipIf(SKIP)('integration: AI Game', () => {
       ])],
     ])
 
-    const config: GameConfig = {
-      gameId: 'ttt-integration-1',
-      seed: 42,
-      players: [
-        { id: 'player-x', name: 'Player X' },
-        { id: 'player-o', name: 'Player O' },
-      ],
-    }
-
-    const engine = new Engine()
+    const engine = new Engine('ttt-integration-1')
     engine.onEvent((e) => recorder.record(e))
-    const outcome = await engine.run(game, players, config)
+    const outcome = await engine.run(game, players)
     recorder.flush()
 
     // Game must reach a terminal state with an outcome

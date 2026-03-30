@@ -22,7 +22,7 @@ const CASSETTE = join(__dirname, '__fixtures__', 'integration-AI-Game-Avalon-pla
 const SKIP = !process.env.GEMINI_API_KEY && !existsSync(CASSETTE)
 
 /** Ask an LLM whether the game events look like a valid Avalon game. */
-async function verifyGameLog(events: GameEvent[], scores: Record<string, number>): Promise<void> {
+async function verifyGameLog(events: any[], scores: Record<string, number>): Promise<void> {
   const result = await generateText({
     model: registry.languageModel(DEFAULT_MODEL as Parameters<typeof registry.languageModel>[0]),
     system: 'You are a board game expert analyzing game logs.',
@@ -47,7 +47,7 @@ ${JSON.stringify(events.map(({ timestamp, ...rest }) => rest))}`,
   })
   const verification = result.toolCalls[0]
   expect(verification).toBeDefined()
-  expect(verification!.input.valid).toBe(true)
+  expect((verification!.input as any).valid).toBe(true)
 }
 
 describe.skipIf(SKIP)('integration: AI Game - Avalon', () => {
@@ -68,6 +68,8 @@ describe.skipIf(SKIP)('integration: AI Game - Avalon', () => {
       playerIds.map(id => {
         const inner = new LLMPlayer(id, id)
         return [id, {
+          id,
+          name: id,
           act: (req: ActionRequest) => {
             const p = chain.then(() => inner.act(req))
             chain = p.then(() => {}, () => {})
@@ -79,14 +81,13 @@ describe.skipIf(SKIP)('integration: AI Game - Avalon', () => {
 
     const events: GameEvent[] = []
     const recorder = new Recorder('avalon-1', LOG_FILE)
-    const engine = new Engine()
+    const engine = new Engine('avalon-1')
     engine.onEvent((e) => recorder.record(e))
     engine.onEvent((e) => events.push(e))
 
     const outcome = await engine.run(
-      new AIGame(readFileSync(RULES_PATH, 'utf-8')),
+      new AIGame(readFileSync(RULES_PATH, 'utf-8'), { gameId: 'avalon-1', seed: 42 }),
       players,
-      { gameId: 'avalon-1', seed: 42, players: playerIds.map(id => ({ id, name: id })) },
     )
     if (!outcome) throw new Error('game did not produce an outcome')
 
