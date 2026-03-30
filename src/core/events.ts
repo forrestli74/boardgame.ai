@@ -11,7 +11,7 @@ export interface PlayerSourceEvent {
   source: 'player'
   gameId: string
   playerId: string
-  lastSeenSeq?: number
+  lastSeenSeq: number
   data: unknown
   timestamp: string
 }

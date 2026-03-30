@@ -53,7 +53,7 @@ describe('Recorder', () => {
   it('multiple events produce multiple JSONL lines', () => {
     const recorder = new Recorder('g1', filePath)
     const event1: GameEvent = { seq: 0, source: 'game', gameId: 'g1', data: { n: 1 }, timestamp: ts }
-    const event2: GameEvent = { seq: 1, source: 'player', gameId: 'g1', playerId: 'p1', data: { n: 2 }, timestamp: ts }
+    const event2: GameEvent = { seq: 1, source: 'player', gameId: 'g1', playerId: 'p1', lastSeenSeq: 0, data: { n: 2 }, timestamp: ts }
     recorder.record(event1)
     recorder.record(event2)
     recorder.flush()
@@ -72,7 +72,7 @@ describe('Recorder', () => {
   it('handles both player and game events', () => {
     const recorder = new Recorder('g1', filePath)
     const playerEvent: GameEvent = {
-      seq: 0, source: 'player', gameId: 'g1', playerId: 'p1', data: { vote: 'yes' }, timestamp: ts,
+      seq: 0, source: 'player', gameId: 'g1', playerId: 'p1', lastSeenSeq: -1, data: { vote: 'yes' }, timestamp: ts,
     }
     const gameEvent: GameEvent = {
       seq: 1, source: 'game', gameId: 'g1', data: { type: 'result' }, timestamp: ts,

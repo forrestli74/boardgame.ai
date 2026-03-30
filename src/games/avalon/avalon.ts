@@ -225,7 +225,7 @@ export class Avalon implements Game {
     })()
   }
 
-  private makeScores(players: AvalonPlayer[], winner: 'good' | 'evil', finalEvents: unknown[] = []): GameOutcome {
+  private makeScores(players: AvalonPlayer[], winner: 'good' | 'evil', finalEvents: AvalonEventData[] = []): GameOutcome {
     const scores: Record<string, number> = {}
     for (const p of players) {
       scores[p.id] = p.team === winner ? 1 : 0

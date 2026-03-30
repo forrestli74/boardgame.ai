@@ -29,7 +29,7 @@ Generator-based state machine. The `play()` method is a generator that yields `G
 | Export | Purpose |
 |---|---|
 | `Game` | Interface — `play(playerIds: string[]): GameFlow` |
-| `GameFlow` | `Generator<GameResponse, GameOutcome, PlayerAction>` |
+| `GameFlow` | `AsyncGenerator<GameResponse, GameOutcome, PlayerAction>` |
 | `PlayerAction` | `{ playerId: string; action: unknown }` — passed to generator via `.next()` |
 
 Each `yield` sends `{ requests, events: unknown[] }` to the engine. Events are raw data — the engine stamps them. Each `.next(playerAction)` delivers one player's raw response. The game is responsible for validating actions. Generator completion signals the game is terminal; the return value is the outcome.

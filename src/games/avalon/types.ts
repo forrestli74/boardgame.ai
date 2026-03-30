@@ -223,3 +223,4 @@ export type AvalonEventData =
   | { type: 'assassination-attempt'; assassin: string; target: string; result: 'success' | 'fail' }
   | { type: 'game-end'; reason: 'three-successes' | 'three-fails' | 'assassination' | 'hammer'; winner: 'good' | 'evil' }
   | { type: 'validation-failed'; playerId: string; raw: unknown }
+  | { type: 'discussion-round'; round: number; statements: { playerId: string; content: string }[] }

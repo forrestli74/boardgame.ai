@@ -38,7 +38,7 @@ describe('GameArtifacts', () => {
       data: { description: 'Game started' }, timestamp: '2026-01-01T00:00:00.000Z',
     }
     const event2: GameEvent = {
-      seq: 1, source: 'player', gameId: 'test', playerId: 'alice',
+      seq: 1, source: 'player', gameId: 'test', playerId: 'alice', lastSeenSeq: 0,
       data: 'approve', timestamp: '2026-01-01T00:00:01.000Z',
     }
 

@@ -34,7 +34,7 @@ export class Engine {
     for (const fn of this.listeners) fn(event)
   }
 
-  private emitPlayerEvent(playerId: string, action: unknown, lastSeenSeq?: number): void {
+  private emitPlayerEvent(playerId: string, action: unknown, lastSeenSeq: number): void {
     this.lastSeq++
     const event: GameEvent = {
       seq: this.lastSeq,
@@ -75,7 +75,7 @@ export class Engine {
       const response = await Promise.race(pending.values())
       pending.delete(response.playerId)
 
-      this.emitPlayerEvent(response.playerId, response.action, response.request.lastSeenSeq)
+      this.emitPlayerEvent(response.playerId, response.action, response.request.lastSeenSeq ?? -1)
 
       result = await gen.next({ playerId: response.playerId, action: response.action })
     }
