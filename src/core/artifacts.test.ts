@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { GameArtifacts } from './artifacts.js'
+import { GameArtifacts, type ArtifactConfig } from './artifacts.js'
 import type { GameEvent } from './events.js'
 import type { PlayerPrivateEvent } from './player.js'
 import type { GameOutcome } from './types.js'
@@ -19,10 +19,9 @@ describe('GameArtifacts', () => {
   })
 
   it('creates output directory and writes config.json', async () => {
-    const config = {
+    const config: ArtifactConfig = {
       gameId: 'test-1',
-      seed: 42,
-      players: ['alice', 'bob'],
+      players: [{ id: 'alice', name: 'Alice' }, { id: 'bob', name: 'Bob' }],
     }
     const outputDir = join(tmpDir, 'test-1')
     await GameArtifacts.create(outputDir, config)
@@ -33,7 +32,7 @@ describe('GameArtifacts', () => {
 
   it('records game events to events.jsonl', async () => {
     const outputDir = join(tmpDir, 'test-events')
-    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test', players: [] })
 
     const event1: GameEvent = {
       seq: 0, source: 'game', gameId: 'test',
@@ -54,7 +53,7 @@ describe('GameArtifacts', () => {
 
   it('records player private events to players/{id}.jsonl', async () => {
     const outputDir = join(tmpDir, 'test-player')
-    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test', players: [] })
 
     const event1: PlayerPrivateEvent = {
       type: 'thought',
@@ -81,7 +80,7 @@ describe('GameArtifacts', () => {
 
   it('writes outcome.json', async () => {
     const outputDir = join(tmpDir, 'test-outcome')
-    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test' })
+    const artifacts = await GameArtifacts.create(outputDir, { gameId: 'test', players: [] })
 
     const outcome: GameOutcome = {
       scores: { alice: 1, bob: 0 },

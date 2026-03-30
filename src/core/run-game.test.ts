@@ -18,6 +18,27 @@ describe('runGame', () => {
     await rm(tmpDir, { recursive: true })
   })
 
+  it('does not write outcome.json when game returns null', async () => {
+    const game: Game = {
+      async *play() {
+        yield { requests: [], events: [] }
+        return { scores: {} }
+      },
+    }
+
+    const outputDir = join(tmpDir, 'test-null')
+    const result = await runGame({
+      gameId: 'test-null',
+      game,
+      players: [],
+      outputDir,
+    })
+
+    expect(result.outcome).toBeNull()
+    const files = await readdir(outputDir)
+    expect(files).not.toContain('outcome.json')
+  })
+
   it('runs a game and writes all artifacts', async () => {
     const game: Game = {
       async *play(playerIds) {
