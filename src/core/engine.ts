@@ -1,6 +1,6 @@
 import type { Game, PlayerAction } from './game.js'
 import type { Player } from './player.js'
-import type { ActionRequest, GameConfig, GameOutcome } from './types.js'
+import type { ActionRequest, GameOutcome } from './types.js'
 import type { GameEvent } from './events.js'
 
 interface PendingResponse {
@@ -10,21 +10,26 @@ interface PendingResponse {
 }
 
 export class Engine {
+  readonly gameId: string
   private listeners: ((event: GameEvent) => void)[] = []
   private lastSeq = -1
+
+  constructor(gameId: string) {
+    this.gameId = gameId
+  }
 
   onEvent(listener: (event: GameEvent) => void): void {
     this.listeners.push(listener)
   }
 
-  private emit(event: Omit<GameEvent, 'seq'>): void {
+  private emit(event: Omit<GameEvent, 'seq' | 'gameId'>): void {
     this.lastSeq++
-    const stamped = { seq: this.lastSeq, ...event } as GameEvent
+    const stamped = { seq: this.lastSeq, gameId: this.gameId, ...event } as GameEvent
     for (const fn of this.listeners) fn(stamped)
   }
 
-  async run(game: Game, players: Map<string, Player>, config: GameConfig): Promise<GameOutcome | null> {
-    const gen = game.play(config)
+  async run(game: Game, players: Map<string, Player>): Promise<GameOutcome | null> {
+    const gen = game.play([...players.keys()])
     const pending = new Map<string, Promise<PendingResponse>>()
     this.lastSeq = -1
 
@@ -52,7 +57,6 @@ export class Engine {
 
       this.emit({
         source: 'player',
-        gameId: config.gameId,
         playerId: response.playerId,
         lastSeenSeq: response.request.lastSeenSeq,
         data: response.action,

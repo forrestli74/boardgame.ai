@@ -3,18 +3,9 @@ import { z } from 'zod'
 import { Engine } from './engine.js'
 import type { Game, GameFlow } from './game.js'
 import type { Player } from './player.js'
-import type { GameConfig, ActionRequest, GameResponse, GameOutcome } from './types.js'
+import type { ActionRequest, GameResponse, GameOutcome } from './types.js'
 
 const ts = '2026-01-01T00:00:00.000Z'
-
-function makeConfig(override?: Partial<GameConfig>): GameConfig {
-  return {
-    gameId: 'g1',
-    seed: 1,
-    players: [{ id: 'p1', name: 'Alice' }],
-    ...override,
-  }
-}
 
 function makeRequest(playerId: string): ActionRequest {
   return { playerId, view: {}, actionSchema: z.object({ move: z.string() }) }
@@ -26,15 +17,14 @@ describe('Engine', () => {
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [makeRequest('p1')], events: [] }
         return { scores: { p1: 1 } }
       },
     }
 
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    await engine.run(game, new Map([['p1', player]]))
     expect(actSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -43,17 +33,15 @@ describe('Engine', () => {
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [makeRequest('p1')], events: [] }
-        // After first response, request again
         yield { requests: [makeRequest('p1')], events: [] }
         return { scores: { p1: 1 } }
       },
     }
 
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    await engine.run(game, new Map([['p1', player]]))
     expect(actSpy).toHaveBeenCalledTimes(2)
   })
 
@@ -62,15 +50,14 @@ describe('Engine', () => {
     const player: Player = { id: 'p1', name: 'Alice', act: actSpy }
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [makeRequest('p1'), makeRequest('p1')], events: [] }
         return { scores: {} }
       },
     }
 
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    await engine.run(game, new Map([['p1', player]]))
     expect(actSpy).toHaveBeenCalledTimes(1)
   })
 
@@ -82,7 +69,6 @@ describe('Engine', () => {
     let receivedAction: unknown
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         const { action } = yield {
           requests: [makeRequest('p1')],
@@ -93,8 +79,8 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    await engine.run(game, new Map([['p1', player]]))
     expect(receivedAction).toEqual({ anything: 'goes' })
   })
 
@@ -107,18 +93,17 @@ describe('Engine', () => {
     const schema = z.object({ move: z.string() })
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return { scores: {} }
       },
     }
 
-    const engine = new Engine()
+    const engine = new Engine('g1')
     engine.onEvent(onEvent)
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    await engine.run(game, new Map([['p1', player]]))
     expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'player', playerId: 'p1' })
+      expect.objectContaining({ source: 'player', playerId: 'p1', gameId: 'g1' })
     )
   })
 
@@ -131,21 +116,20 @@ describe('Engine', () => {
     const schema = z.object({ move: z.string() })
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
-          events: [{ source: 'game' as const, gameId: 'g1', data: { type: 'init' }, timestamp: ts }],
+          events: [{ source: 'game' as const, data: { type: 'init' }, timestamp: ts }],
         }
         return { scores: {} }
       },
     }
 
-    const engine = new Engine()
+    const engine = new Engine('g1')
     engine.onEvent(onEvent)
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    await engine.run(game, new Map([['p1', player]]))
     expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'game' })
+      expect.objectContaining({ source: 'game', gameId: 'g1' })
     )
   })
 
@@ -158,7 +142,6 @@ describe('Engine', () => {
     let deliveredAction: unknown
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         const { action } = yield {
           requests: [{ playerId: 'p1', view: {}, actionSchema: schema }],
@@ -169,8 +152,8 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine()
-    await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    await engine.run(game, new Map([['p1', player]]))
     expect(deliveredAction).toEqual({ move: 'right' })
   })
 
@@ -178,15 +161,14 @@ describe('Engine', () => {
     const player: Player = { id: 'p1', name: 'Alice', act: vi.fn().mockResolvedValue({}) }
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [], events: [] }
         return { scores: {} }
       },
     }
 
-    const engine = new Engine()
-    const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    const outcome = await engine.run(game, new Map([['p1', player]]))
     expect(outcome).toBeNull()
   })
 
@@ -195,15 +177,14 @@ describe('Engine', () => {
     const schema = z.object({ move: z.string() })
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return { scores: { p1: 1 } }
       },
     }
 
-    const engine = new Engine()
-    const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    const outcome = await engine.run(game, new Map([['p1', player]]))
     expect(outcome).toEqual({ scores: { p1: 1 } })
   })
 
@@ -216,15 +197,14 @@ describe('Engine', () => {
     const expected: GameOutcome = { scores: { p1: 10, p2: 5 } }
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [{ playerId: 'p1', view: {}, actionSchema: schema }], events: [] }
         return expected
       },
     }
 
-    const engine = new Engine()
-    const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    const outcome = await engine.run(game, new Map([['p1', player]]))
     expect(outcome).toEqual(expected)
   })
 
@@ -238,9 +218,7 @@ describe('Engine', () => {
     ])
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
-        // Request both players simultaneously
         yield {
           requests: [
             { playerId: 'p1', view: {}, actionSchema: schema },
@@ -248,19 +226,13 @@ describe('Engine', () => {
           ],
           events: [],
         }
-        // First response comes in — buffer it
         yield { requests: [], events: [] }
-        // Second response — both done
         return { scores: { p1: 1, p2: 1 } }
       },
     }
 
-    const engine = new Engine()
-    const config: GameConfig = {
-      gameId: 'g1', seed: 1,
-      players: [{ id: 'p1', name: 'Alice' }, { id: 'p2', name: 'Bob' }],
-    }
-    await engine.run(game, players, config)
+    const engine = new Engine('g1')
+    await engine.run(game, players)
     expect(p1Act).toHaveBeenCalledTimes(1)
     expect(p2Act).toHaveBeenCalledTimes(1)
   })
@@ -271,7 +243,6 @@ describe('Engine', () => {
     const schema = z.object({ move: z.string() })
 
     const game: Game = {
-      optionsSchema: z.object({}),
       async *play() {
         yield { requests: [{ playerId: 'p1', view: { step: 0 }, actionSchema: schema }], events: [] }
         yield { requests: [{ playerId: 'p1', view: { step: 1 }, actionSchema: schema }], events: [] }
@@ -280,8 +251,8 @@ describe('Engine', () => {
       },
     }
 
-    const engine = new Engine()
-    const outcome = await engine.run(game, new Map([['p1', player]]), makeConfig())
+    const engine = new Engine('g1')
+    const outcome = await engine.run(game, new Map([['p1', player]]))
     expect(actSpy).toHaveBeenCalledTimes(3)
     expect(outcome?.scores.p1).toBe(3)
   })
