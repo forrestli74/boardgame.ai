@@ -10,9 +10,13 @@ import { BroadcastDiscussion } from '../../core/discussion.js'
 //                      diana=morgana(evil), eve=assassin(evil), frank=loyal-servant(good),
 //                      grace=mordred(evil), leaderIndex=0 (alice)
 
-function makeConfig(playerCount: number, seed = 42) {
-  const ids = ['alice', 'bob', 'charlie', 'diana', 'eve', 'frank', 'grace', 'heidi', 'ivan', 'judy'].slice(0, playerCount)
-  return { gameId: 'test', seed, players: ids.map(id => ({ id, name: id })) }
+const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
+const players7 = ['alice', 'bob', 'charlie', 'diana', 'eve', 'frank', 'grace']
+
+/** Creates a scripted-players map with keys in the given playerIds order */
+function orderedScriptedPlayers(playerIds: string[], actions: [string, unknown][]) {
+  const map = scriptedPlayers(actions)
+  return new Map(playerIds.map(id => [id, map.get(id)!]))
 }
 
 // Helper to create all-approve votes for a list of players
@@ -37,8 +41,6 @@ function findGameEnd(allEvents: unknown[]) {
 
 describe('Avalon', () => {
   it('evil wins by hammer rule (5 consecutive rejections)', async () => {
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
     // Quest 0, team size 2
     // Leaders in order: charlie(2) → diana(3) → eve(4) → alice(0) → bob(1) → 5th rejection → hammer
     const actions: [string, unknown][] = [
@@ -59,11 +61,11 @@ describe('Avalon', () => {
       ...allReject(players5),
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
     const gameEndEvent = findGameEnd(allEvents)
@@ -81,8 +83,6 @@ describe('Avalon', () => {
   })
 
   it('evil wins by 3 quest failures', async () => {
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
     // Quest configs 5p: q(2), q(3), q(2), q(3), q(3)
     // Leaders: charlie(2) → diana(3) → eve(4) after quest rotations
     // Include eve(evil) on each team, she votes fail
@@ -109,11 +109,11 @@ describe('Avalon', () => {
       ['eve', { success: false }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
     const gameEndEvent = findGameEnd(allEvents)
@@ -134,8 +134,6 @@ describe('Avalon', () => {
   })
 
   it('good wins when assassin guesses wrong', async () => {
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
     // alice=merlin, bob=assassin; merlin is alice
     // For assassin to LOSE: bob picks charlie (not alice)
     // Leaders: charlie(2) → diana(3) → eve(4)
@@ -160,11 +158,11 @@ describe('Avalon', () => {
       ['bob', { targetId: 'charlie' }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
     const gameEndEvent = findGameEnd(allEvents)
@@ -182,8 +180,6 @@ describe('Avalon', () => {
   })
 
   it('evil wins when assassin correctly identifies Merlin', async () => {
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
     // alice=merlin, bob=assassin; assassin picks alice(merlin) → evil wins
     const actions: [string, unknown][] = [
       // Quest 0: leader=charlie, team size 2
@@ -206,11 +202,11 @@ describe('Avalon', () => {
       ['bob', { targetId: 'alice' }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
     const gameEndEvent = findGameEnd(allEvents)
@@ -227,8 +223,6 @@ describe('Avalon', () => {
   })
 
   it('4th quest requires 2 fails for 7+ players', async () => {
-    const config = makeConfig(7)
-    const players7 = ['alice', 'bob', 'charlie', 'diana', 'eve', 'frank', 'grace']
     // Quest configs 7p: q(2), q(3), q(3), q(4,2), q(4)
     // seed=42, 7p: alice=loyal-servant, bob=percival, charlie=merlin, diana=morgana(evil),
     //              eve=assassin(evil), frank=loyal-servant, grace=mordred(evil), leaderIndex=0 (alice)
@@ -266,11 +260,11 @@ describe('Avalon', () => {
       ['eve', { targetId: 'alice' }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players7, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
 
@@ -301,8 +295,6 @@ describe('Avalon', () => {
     //              diana=percival(good), eve=morgana(evil), leaderIndex=2 (charlie)
     // BroadcastDiscussion(1): 1 round of discussion per proposal
     // 3 successful quests (good-only teams) + assassination miss → good wins
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
 
     // Discussion: leader speaks first, then remaining players in order
     // With firstSpeakers=[leader], order is: leader, then rest
@@ -336,11 +328,11 @@ describe('Avalon', () => {
       ['bob', { targetId: 'charlie' }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    const outcome = await engine.run(new Avalon(new BroadcastDiscussion(1)), scriptedPlayers(actions), config)
+    const outcome = await engine.run(new Avalon({ seed: 42, discussion: new BroadcastDiscussion(1) }), orderedScriptedPlayers(players5, actions))
 
     const allEvents = collectAllEvents(emittedEvents, outcome as any)
     const gameEndEvent = findGameEnd(allEvents)
@@ -365,8 +357,6 @@ describe('Avalon', () => {
   })
 
   it('rotates leader after team rejection', async () => {
-    const config = makeConfig(5)
-    const players5 = ['alice', 'bob', 'charlie', 'diana', 'eve']
     // seed=42, leaderIndex=2 (charlie); after rejection leaderIndex=3 (diana)
     // First proposal: charlie leads → all reject
     // Second proposal: diana leads → all approve → quest succeeds
@@ -400,11 +390,11 @@ describe('Avalon', () => {
       ['bob', { targetId: 'charlie' }],
     ]
 
-    const engine = new Engine()
+    const engine = new Engine('test')
     const emittedEvents: unknown[] = []
     engine.onEvent(e => emittedEvents.push(e))
 
-    await engine.run(new Avalon(), scriptedPlayers(actions), config)
+    await engine.run(new Avalon({ seed: 42 }), orderedScriptedPlayers(players5, actions))
 
     const teamProposedEvents = emittedEvents.filter(
       (e: any) => e.source === 'game' && (e.data as any).type === 'team-proposed'
