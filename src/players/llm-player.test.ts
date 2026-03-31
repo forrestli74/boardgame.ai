@@ -155,16 +155,31 @@ describe('LLMPlayer', () => {
     expect(player.getLastReasoning()).toBe('I should block')
   })
 
-  it('propagates errors from generateText', async () => {
-    mockGenerateText.mockRejectedValueOnce(new Error('API rate limit exceeded'))
+  it('retries on no tool call and succeeds on 2nd attempt', async () => {
+    mockGenerateText.mockResolvedValueOnce({ toolCalls: [] })
+    mockResponse({ position: 5 })
     const player = new LLMPlayer('p1', 'Alice')
-    await expect(player.act(makeRequest())).rejects.toThrow('API rate limit exceeded')
+    const result = await player.act(makeRequest())
+    expect(result).toEqual({ position: 5 })
+    expect(mockGenerateText).toHaveBeenCalledTimes(2)
   })
 
-  it('throws when LLM returns no tool call', async () => {
-    mockGenerateText.mockResolvedValueOnce({ toolCalls: [] })
+  it('retries on invalid action schema and succeeds on 2nd attempt', async () => {
+    // First attempt: valid tool call but action fails schema (position must be 0-8)
+    mockResponse({ position: 99 })
+    mockResponse({ position: 3 })
     const player = new LLMPlayer('p1', 'Alice')
-    await expect(player.act(makeRequest())).rejects.toThrow('LLM returned no tool call')
+    const result = await player.act(makeRequest())
+    expect(result).toEqual({ position: 3 })
+    expect(mockGenerateText).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns null after 3 failed attempts', async () => {
+    mockGenerateText.mockResolvedValue({ toolCalls: [] })
+    const player = new LLMPlayer('p1', 'Alice')
+    const result = await player.act(makeRequest())
+    expect(result).toBeNull()
+    expect(mockGenerateText).toHaveBeenCalledTimes(3)
   })
 
   it('emits thought event via onEvent listener', async () => {

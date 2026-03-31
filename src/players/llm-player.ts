@@ -69,33 +69,50 @@ export class LLMPlayer implements Player {
       action: request.actionSchema as z.ZodTypeAny,
     })
 
-    const result = await generateText({
-      model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-      maxOutputTokens: 4096,
-      tools: {
-        submit_action: tool({
-          description: 'Submit your reasoning, updated memory, and chosen action',
-          inputSchema: wrappedSchema,
-        }),
-      },
-      toolChoice: { type: 'tool', toolName: 'submit_action' },
-    })
+    let lastError = ''
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await generateText({
+        model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+        maxOutputTokens: 4096,
+        tools: {
+          submit_action: tool({
+            description: 'Submit your reasoning, updated memory, and chosen action',
+            inputSchema: wrappedSchema,
+          }),
+        },
+        toolChoice: { type: 'tool', toolName: 'submit_action' },
+      })
 
-    const call = result.toolCalls[0]
-    if (!call) throw new Error('LLM returned no tool call')
+      const call = result.toolCalls[0]
+      if (!call) {
+        lastError = 'no tool call returned'
+        console.error(`[${this.id}] attempt ${attempt + 1}/3: ${lastError}`)
+        continue
+      }
 
-    const response = call.input as { reasoning: string; memory: string; action: unknown }
-    this.memory = response.memory
-    this.lastReasoning_ = response.reasoning
-    this.emitPrivate({
-      reasoning: response.reasoning,
-      memory: response.memory,
-      action: response.action,
-      lastSeenSeq: request.lastSeenSeq,
-    })
+      const response = call.input as { reasoning: string; memory: string; action: unknown }
+      const parsed = request.actionSchema.safeParse(response.action)
+      if (!parsed.success) {
+        lastError = `invalid action: ${parsed.error.message}`
+        console.error(`[${this.id}] attempt ${attempt + 1}/3: ${lastError}`)
+        continue
+      }
 
-    return response.action
+      this.memory = response.memory
+      this.lastReasoning_ = response.reasoning
+      this.emitPrivate({
+        reasoning: response.reasoning,
+        memory: response.memory,
+        action: response.action,
+        lastSeenSeq: request.lastSeenSeq,
+      })
+
+      return response.action
+    }
+
+    console.error(`[${this.id}] LLM failed after 3 attempts: ${lastError}`)
+    return null
   }
 }
