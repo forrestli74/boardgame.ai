@@ -119,6 +119,17 @@ LLM-powered Player implementation with persistent memory and chain-of-thought re
 
 Shared provider registry built with Vercel AI SDK's `createProviderRegistry()`. Registers Google (Gemini) as the sole provider. Resolves `'google:model'` strings (e.g., `'google:gemini-2.5-flash'`) to model instances. API key is read from `GEMINI_API_KEY` environment variable.
 
+## CLI (`src/cli/`)
+
+Command-line interface for running games. `boardgame <config.json> [flags]`.
+
+- **`index.ts`** — Commander entrypoint. Reads JSON config, resolves personas, stamps date, calls batch runner.
+- **`config.ts`** — Zod schema for config files. `parseConfig(raw)` validates, `resolvePersonas(players, configDir)` reads persona files.
+- **`batch.ts`** — Batch orchestration. `generateGamePlans()` produces plans from groups + balance mode. `runBatch()` executes with `p-limit` concurrency. Fresh Game + Player instances per game.
+- **`game-registry.ts`** — Maps game names to constructors. `createGame("avalon", gameOptions)` → `new Avalon(...)`.
+
+**Balancing modes:** `none` (1 game/group), `rotate` (N rotations/group), `permute` (N! permutations/group). Output dirs: `<game>-<YYYYMMDD>-<group>[-<iter>]`.
+
 ## Project Structure
 
 ```
@@ -146,6 +157,13 @@ src/
 │       ├── prompts.ts        # Prompt builders
 │       ├── schemas.ts        # LLM response schema + JSON Schema ↔ Zod
 │       └── *.test.ts         # Co-located tests
+│
+├── cli/                      # CLI entrypoint and batch runner
+│   ├── index.ts              # Commander CLI — boardgame <config.json> [flags]
+│   ├── config.ts             # Config schema (Zod), persona file resolution
+│   ├── batch.ts              # Batch runner — groups, balancing, concurrency
+│   ├── game-registry.ts      # Game name → constructor factory
+│   └── *.test.ts             # Co-located tests
 │
 ├── players/                  # Player implementations
 │   └── llm-player.ts         # LLM-backed agent

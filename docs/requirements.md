@@ -45,11 +45,11 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 - [x] **DISC-01**: One statement per player per round → T-DISCUSSION
 - [x] **DISC-02**: Statements visible to all, captured in log → T-DISCUSSION
 
-### Execution (Phase 4–5)
+### Execution (Phase 4 — Complete)
 
-- [ ] **EXEC-01**: Single game runner via CLI → T-CLI-RUNNER
-- [ ] **EXEC-02**: Batch mode with concurrency → T-BATCH-MODE
-- [ ] **EXEC-03**: Batch output organized by run → T-BATCH-MODE
+- [x] **EXEC-01**: Single game runner via CLI → T-CLI-RUNNER
+- [x] **EXEC-02**: Batch mode with concurrency → T-BATCH-MODE
+- [x] **EXEC-03**: Batch output organized by run → T-BATCH-MODE
 
 ## v2 (Future)
 
@@ -69,5 +69,5 @@ Defined 2026-03-21. See TIDE tasks (`.tide/tasks/`) for full acceptance criteria
 | 1. Data Model | FRAME-01–03, DATA-01–03 | Complete |
 | 2. Avalon Rules | AVLN-01–08, RAND-01 | Complete |
 | 3. LLM Agents | AGENT-01–05, DISC-01–02 | Complete |
-| 4. CLI Runner | EXEC-01, DATA-04 | Pending |
-| 5. Batch Mode | EXEC-02–03 | Pending |
+| 4. CLI Runner | EXEC-01–03 | Complete |
+| 5. Summary | DATA-04 | Pending |

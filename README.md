@@ -4,8 +4,8 @@ Framework for LLM agents to play social deduction board games (starting with Ava
 
 ## Current State
 
-- **Phase 1 complete** — core types, engine, recorder, events.
-- **Phase 2 next** — Avalon rules (deterministic, no LLMs needed)
+- **Phase 1–3 complete** — core framework, Avalon rules, LLM agents, discussion
+- **Phase 4 complete** — CLI runner with batch mode
 - `src/core/` is stable. `src/games/ai_game/` is experimental/WIP.
 
 ## Stack
@@ -16,10 +16,28 @@ Framework for LLM agents to play social deduction board games (starting with Ava
 - Vitest for testing
 - pnpm as package manager
 
+## CLI Usage
+
+```bash
+# Single game
+pnpm tsx src/cli/index.ts config.json
+
+# Batch: 5 groups, rotate player positions, 3 parallel games
+pnpm tsx src/cli/index.ts config.json --groups 5 --balance rotate --concurrency 3
+
+# Custom output directory
+pnpm tsx src/cli/index.ts config.json --output ./runs
+```
+
+**Flags:** `--groups N` (default 1), `--balance none|rotate|permute` (default none), `--concurrency N` (default 1), `--output dir` (default ./output)
+
+See `docs/architecture.md` for config file format.
+
 ## Commands
 
 - `pnpm test` — run all tests (vitest)
 - `pnpm run typecheck` — type-check without emitting
+- `pnpm run build` — compile TypeScript
 - `pnpm run dev` — run dev server with tsx watch
 
 ## Docs
@@ -39,7 +57,10 @@ Framework for LLM agents to play social deduction board games (starting with Ava
 ## Source
 
 - `src/core/` — framework types, engine, recorder, events
+- `src/cli/` — CLI entrypoint, config parsing, batch runner
+- `src/games/avalon/` — Native Avalon implementation
 - `src/games/ai_game/` — LLM-powered game master (experimental/WIP)
+- `src/players/` — Player implementations (LLM player)
 
 ## Conventions
 
