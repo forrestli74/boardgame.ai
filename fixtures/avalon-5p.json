@@ -1,0 +1,17 @@
+{
+  "game": "avalon",
+  "gameOptions": {
+    "seed": 42,
+    "discussion": {
+      "type": "broadcast",
+      "maxRounds": 1
+    }
+  },
+  "players": [
+    { "name": "Alice", "persona": "You are cautious and analytical. You observe before accusing." },
+    { "name": "Bob", "persona": "You are an aggressive leader. You push for quick decisions." },
+    { "name": "Charlie", "persona": "You are quiet and observant. You speak only when you have strong evidence." },
+    { "name": "Diana", "persona": "You are social and persuasive. You build alliances." },
+    { "name": "Eve", "persona": "You are cunning and deceptive. You sow doubt." }
+  ]
+}
