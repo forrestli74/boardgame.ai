@@ -4,7 +4,7 @@
   "description": "",
   "type": "module",
   "bin": {
-    "boardgame": "./dist/cli/index.js"
+    "boardgame": "./dist/cli/bin.js"
   },
   "scripts": {
     "test": "vitest run",

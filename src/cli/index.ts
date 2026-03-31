@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { Command } from 'commander'
 import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -45,10 +43,21 @@ program
     const players = await resolvePersonas(config.players, configDir)
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
 
+    const groups = parseInt(opts.groups, 10)
+    if (!Number.isFinite(groups) || groups < 1) {
+      console.error('error: --groups must be a positive integer')
+      process.exit(1)
+    }
+    const concurrency = parseInt(opts.concurrency, 10)
+    if (!Number.isFinite(concurrency) || concurrency < 1) {
+      console.error('error: --concurrency must be a positive integer')
+      process.exit(1)
+    }
+
     const batchOptions: BatchOptions = {
-      groups: parseInt(opts.groups, 10),
+      groups,
       balance: opts.balance as BatchOptions['balance'],
-      concurrency: parseInt(opts.concurrency, 10),
+      concurrency,
       outputDir: opts.output,
       date,
     }
@@ -62,15 +71,3 @@ program
     }
   })
 
-// Only run if this is the main module (not imported by tests)
-const isMain =
-  typeof process !== 'undefined' &&
-  process.argv[1] &&
-  import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))
-
-if (isMain) {
-  program.parseAsync().catch((err) => {
-    console.error(err)
-    process.exit(1)
-  })
-}
