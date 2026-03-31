@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "type": "module",
+  "bin": {
+    "boardgame": "./dist/cli/index.js"
+  },
   "scripts": {
     "test": "vitest run",
     "test:record": "VCR_MODE=record vitest run",
     "test:ci": "VCR_MODE=lockdown vitest run",
     "typecheck": "tsc --noEmit",
-    "dev": "tsx watch src/index.ts"
+    "build": "tsc",
+    "dev": "tsx watch src/cli/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +21,8 @@
   "dependencies": {
     "@ai-sdk/google": "^3.0.53",
     "ai": "^6.0.138",
+    "commander": "^14.0.3",
+    "p-limit": "^7.3.0",
     "pino": "^10.3.1",
     "zod": "^4.3.6"
   },
