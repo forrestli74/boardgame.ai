@@ -1,6 +1,6 @@
 import pLimit from 'p-limit'
 import { join } from 'node:path'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile, access } from 'node:fs/promises'
 import { runGame, type RunGameHandle } from '../core/run-game.js'
 import type { Engine } from '../core/engine.js'
 import { createGame } from './game-registry.js'
@@ -105,12 +105,33 @@ function toPlayerId(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-')
 }
 
+async function exists(path: string): Promise<boolean> {
+  try { await access(path); return true } catch { return false }
+}
+
+async function uniqueBatchDir(base: string): Promise<string> {
+  if (!await exists(base)) return base
+  for (let i = 2; ; i++) {
+    const candidate = `${base}-${i}`
+    if (!await exists(candidate)) return candidate
+  }
+}
+
 export async function runBatch(
   config: GameConfig,
   players: ResolvedPlayer[],
   options: BatchOptions,
 ): Promise<BatchResult> {
-  const { batchDir, plans } = generateGamePlans(config, players, options)
+  const { batchDir: baseBatchDir, plans } = generateGamePlans(config, players, options)
+  const batchDir = await uniqueBatchDir(baseBatchDir)
+
+  // Rebase plan outputDirs if batchDir changed
+  if (batchDir !== baseBatchDir) {
+    for (const plan of plans) {
+      plan.outputDir = join(batchDir, plan.gameId)
+    }
+  }
+
   await mkdir(batchDir, { recursive: true })
   await writeFile(join(batchDir, 'config.json'), JSON.stringify(config, null, 2) + '\n')
 

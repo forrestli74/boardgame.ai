@@ -1,0 +1,17 @@
+{
+  "game": "avalon",
+  "gameOptions": {
+    "seed": 42,
+    "discussion": {
+      "type": "broadcast",
+      "maxRounds": 1
+    }
+  },
+  "players": [
+    { "name": "Alice", "personaFile": "./personas/strategy-v2.md" },
+    { "name": "Bob", "personaFile": "./personas/strategic-evil.md" },
+    { "name": "Charlie", "personaFile": "./personas/strategy-v2.md" },
+    { "name": "Diana", "personaFile": "./personas/strategic-evil.md" },
+    { "name": "Eve", "personaFile": "./personas/strategic-evil.md" }
+  ]
+}
