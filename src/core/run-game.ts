@@ -16,7 +16,12 @@ export interface GameResult {
   outputDir: string
 }
 
-export async function runGame(options: RunGameOptions): Promise<GameResult> {
+export interface RunGameHandle {
+  engine: Engine
+  result: Promise<GameResult>
+}
+
+export async function runGame(options: RunGameOptions): Promise<RunGameHandle> {
   const { gameId, game, players, outputDir } = options
 
   const playerMap = new Map(players.map(p => [p.id, p]))
@@ -35,11 +40,12 @@ export async function runGame(options: RunGameOptions): Promise<GameResult> {
     }
   }
 
-  const outcome = await engine.run(game, playerMap)
+  const result = engine.run(game, playerMap).then(async (outcome) => {
+    if (outcome) {
+      await artifacts.writeOutcome(outcome)
+    }
+    return { outcome, outputDir }
+  })
 
-  if (outcome) {
-    await artifacts.writeOutcome(outcome)
-  }
-
-  return { outcome, outputDir }
+  return { engine, result }
 }

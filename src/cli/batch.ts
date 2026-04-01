@@ -1,6 +1,7 @@
 import pLimit from 'p-limit'
 import { join } from 'node:path'
-import { runGame } from '../core/run-game.js'
+import { runGame, type RunGameHandle } from '../core/run-game.js'
+import type { Engine } from '../core/engine.js'
 import { createGame } from './game-registry.js'
 import { LLMPlayer } from '../players/llm-player.js'
 import { logger as rootLogger } from '../core/logger.js'
@@ -110,10 +111,24 @@ export async function runBatch(
   const plans = generateGamePlans(config, players, options)
   const limit = pLimit(options.concurrency)
   const results: BatchResult['results'] = []
+  const activeGames = new Map<string, Engine>()
+  let completedCount = 0
+
+  const timer = setInterval(() => {
+    const active = [...activeGames.entries()].map(([gameId, engine]) => ({
+      gameId,
+      lastSeq: engine.lastSeq,
+    }))
+    log.info({
+      type: 'batch-progress',
+      completed: completedCount,
+      remaining: plans.length - completedCount,
+      activeGames: active,
+    })
+  }, 30_000)
 
   const tasks = plans.map((plan, index) =>
     limit(async () => {
-      const label = `[${index + 1}/${plans.length}] ${plan.gameId}`
       try {
         const game = createGame(config.game, config.gameOptions)
         const gamePlayers = plan.playerOrder.map((p) => {
@@ -121,16 +136,23 @@ export async function runBatch(
           return new LLMPlayer(id, p.name, { model: p.model, persona: p.persona })
         })
 
-        const result = await runGame({
+        const handle = await runGame({
           gameId: plan.gameId,
           game,
           players: gamePlayers,
           outputDir: plan.outputDir,
         })
 
+        activeGames.set(plan.gameId, handle.engine)
+        const result = await handle.result
+        activeGames.delete(plan.gameId)
+
+        completedCount++
         log.info({ type: 'game-done', gameId: plan.gameId, index: index + 1, total: plans.length })
         results.push({ gameId: plan.gameId, outcome: result.outcome })
       } catch (err) {
+        activeGames.delete(plan.gameId)
+        completedCount++
         const msg = err instanceof Error ? err.message : String(err)
         log.error({ type: 'game-error', gameId: plan.gameId, index: index + 1, total: plans.length, error: msg })
         results.push({ gameId: plan.gameId, outcome: null, error: msg })
@@ -138,7 +160,11 @@ export async function runBatch(
     }),
   )
 
-  await Promise.all(tasks)
+  try {
+    await Promise.all(tasks)
+  } finally {
+    clearInterval(timer)
+  }
 
   const completed = results.filter((r) => r.outcome !== null).length
   const failed = results.filter((r) => r.error !== undefined).length

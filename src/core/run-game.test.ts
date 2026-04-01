@@ -27,12 +27,13 @@ describe('runGame', () => {
     }
 
     const outputDir = join(tmpDir, 'test-null')
-    const result = await runGame({
+    const handle = await runGame({
       gameId: 'test-null',
       game,
       players: [],
       outputDir,
     })
+    const result = await handle.result
 
     expect(result.outcome).toBeNull()
     const files = await readdir(outputDir)
@@ -71,12 +72,13 @@ describe('runGame', () => {
     }
 
     const outputDir = join(tmpDir, 'test-run')
-    const result = await runGame({
+    const handle = await runGame({
       gameId: 'test-run',
       game,
       players: [makeMockPlayer('alice'), makeMockPlayer('bob')],
       outputDir,
     })
+    const result = await handle.result
 
     expect(result.outcome).toEqual({ scores: { alice: 1, bob: 1 } })
     expect(result.outputDir).toBe(outputDir)

@@ -12,20 +12,23 @@ interface PendingResponse {
 export class Engine {
   readonly gameId: string
   private listeners: ((event: GameEvent) => void)[] = []
-  private lastSeq = -1
+  private _lastSeq = -1
+  private started = false
 
   constructor(gameId: string) {
     this.gameId = gameId
   }
+
+  get lastSeq(): number { return this._lastSeq }
 
   onEvent(listener: (event: GameEvent) => void): void {
     this.listeners.push(listener)
   }
 
   private emitGameEvent(data: unknown): void {
-    this.lastSeq++
+    this._lastSeq++
     const event: GameEvent = {
-      seq: this.lastSeq,
+      seq: this._lastSeq,
       source: 'game',
       gameId: this.gameId,
       data,
@@ -35,9 +38,9 @@ export class Engine {
   }
 
   private emitPlayerEvent(playerId: string, action: unknown, lastSeenSeq: number): void {
-    this.lastSeq++
+    this._lastSeq++
     const event: GameEvent = {
-      seq: this.lastSeq,
+      seq: this._lastSeq,
       source: 'player',
       gameId: this.gameId,
       playerId,
@@ -49,9 +52,11 @@ export class Engine {
   }
 
   async run(game: Game, players: Map<string, Player>): Promise<GameOutcome | null> {
+    if (this.started) throw new Error('Engine can only run once')
+    this.started = true
     const gen = game.play([...players.keys()])
     const pending = new Map<string, Promise<PendingResponse>>()
-    this.lastSeq = -1
+    this._lastSeq = -1
 
     let result = await gen.next()
     while (!result.done) {
@@ -63,7 +68,7 @@ export class Engine {
       for (const req of requests) {
         if (!pending.has(req.playerId)) {
           const player = players.get(req.playerId)!
-          const stamped = { ...req, lastSeenSeq: this.lastSeq }
+          const stamped = { ...req, lastSeenSeq: this._lastSeq }
           const promise = player.act(stamped)
             .then(action => ({ playerId: req.playerId, action, request: stamped }))
           pending.set(req.playerId, promise)
