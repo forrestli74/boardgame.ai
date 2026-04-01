@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Player } from '../core/player.js'
 import type { ActionRequest } from '../core/types.js'
 import { registry, DEFAULT_MODEL } from '../core/llm-registry.js'
+import { logger as rootLogger } from '../core/logger.js'
 
 export interface LLMPlayerOptions {
   model?: string
@@ -30,6 +31,7 @@ export class LLMPlayer implements Player {
   readonly name: string
   private readonly model: string
   private readonly persona?: string
+  private readonly log
   private memory = ''
   private lastReasoning_?: string
   private privateListeners: ((data: unknown) => void)[] = []
@@ -39,6 +41,7 @@ export class LLMPlayer implements Player {
     this.name = name
     this.model = options?.model ?? DEFAULT_MODEL
     this.persona = options?.persona
+    this.log = rootLogger.child({ component: 'llm-player', playerId: id })
   }
 
   getMemory(): string { return this.memory }
@@ -71,6 +74,7 @@ export class LLMPlayer implements Player {
 
     let lastError = ''
     for (let attempt = 0; attempt < 3; attempt++) {
+      const start = Date.now()
       const result = await generateText({
         model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
         system: systemPrompt,
@@ -84,11 +88,12 @@ export class LLMPlayer implements Player {
         },
         toolChoice: { type: 'tool', toolName: 'submit_action' },
       })
+      const durationMs = Date.now() - start
 
       const call = result.toolCalls[0]
       if (!call) {
         lastError = 'no tool call returned'
-        console.error(`[${this.id}] attempt ${attempt + 1}/3: ${lastError}`)
+        this.log.warn({ type: 'llm-retry', model: this.model, attempt: attempt + 1, durationMs, reason: lastError })
         continue
       }
 
@@ -96,9 +101,20 @@ export class LLMPlayer implements Player {
       const parsed = request.actionSchema.safeParse(response.action)
       if (!parsed.success) {
         lastError = `invalid action: ${parsed.error.message}`
-        console.error(`[${this.id}] attempt ${attempt + 1}/3: ${lastError}`)
+        this.log.warn({ type: 'llm-retry', model: this.model, attempt: attempt + 1, durationMs, reason: lastError })
         continue
       }
+
+      this.log.info({
+        type: 'llm-call',
+        model: this.model,
+        attempt: attempt + 1,
+        durationMs,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        totalTokens: result.usage?.totalTokens,
+        finishReason: result.finishReason,
+      })
 
       this.memory = response.memory
       this.lastReasoning_ = response.reasoning
@@ -112,7 +128,7 @@ export class LLMPlayer implements Player {
       return response.action
     }
 
-    console.error(`[${this.id}] LLM failed after 3 attempts: ${lastError}`)
+    this.log.error({ type: 'llm-exhausted', model: this.model, attempts: 3, lastError })
     return null
   }
 }

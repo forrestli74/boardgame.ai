@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { parseConfig } from './config.js'
 import { resolvePersonas } from './config.js'
 import { runBatch } from './batch.js'
+import { logger } from '../core/logger.js'
 import type { BatchOptions } from './batch.js'
 
 export const program = new Command()
@@ -64,7 +65,7 @@ program
 
     const result = await runBatch(config, players, batchOptions)
 
-    console.log(`Completed: ${result.completed}/${result.total} games (${result.failed} failed)`)
+    logger.info({ type: 'batch-complete', completed: result.completed, total: result.total, failed: result.failed })
 
     if (result.failed > 0) {
       process.exit(1)

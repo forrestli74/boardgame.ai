@@ -3,8 +3,11 @@ import { join } from 'node:path'
 import { runGame } from '../core/run-game.js'
 import { createGame } from './game-registry.js'
 import { LLMPlayer } from '../players/llm-player.js'
+import { logger as rootLogger } from '../core/logger.js'
 import type { GameOutcome } from '../core/types.js'
 import type { ResolvedPlayer, GameConfig } from './config.js'
+
+const log = rootLogger.child({ component: 'batch' })
 
 export interface GamePlan {
   gameId: string
@@ -125,11 +128,11 @@ export async function runBatch(
           outputDir: plan.outputDir,
         })
 
-        console.log(`${label}...done`)
+        log.info({ type: 'game-done', gameId: plan.gameId, index: index + 1, total: plans.length })
         results.push({ gameId: plan.gameId, outcome: result.outcome })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.log(`${label}...error: ${msg}`)
+        log.error({ type: 'game-error', gameId: plan.gameId, index: index + 1, total: plans.length, error: msg })
         results.push({ gameId: plan.gameId, outcome: null, error: msg })
       }
     }),
