@@ -105,7 +105,7 @@ export class LLMPlayer implements Player {
         continue
       }
 
-      this.log.info({
+      this.log.debug({
         type: 'llm-call',
         model: this.model,
         attempt: attempt + 1,
