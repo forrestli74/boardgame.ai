@@ -174,12 +174,12 @@ describe('LLMPlayer', () => {
     expect(mockGenerateText).toHaveBeenCalledTimes(2)
   })
 
-  it('returns null after 3 failed attempts', async () => {
+  it('returns null after 5 failed attempts', async () => {
     mockGenerateText.mockResolvedValue({ toolCalls: [] })
     const player = new LLMPlayer('p1', 'Alice')
     const result = await player.act(makeRequest())
     expect(result).toBeNull()
-    expect(mockGenerateText).toHaveBeenCalledTimes(3)
+    expect(mockGenerateText).toHaveBeenCalledTimes(5)
   })
 
   it('emits thought event via onEvent listener', async () => {

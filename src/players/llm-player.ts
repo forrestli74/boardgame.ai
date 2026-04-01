@@ -73,7 +73,7 @@ export class LLMPlayer implements Player {
     })
 
     let lastError = ''
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const start = Date.now()
       const result = await generateText({
         model: registry.languageModel(this.model as Parameters<typeof registry.languageModel>[0]),
@@ -128,7 +128,7 @@ export class LLMPlayer implements Player {
       return response.action
     }
 
-    this.log.error({ type: 'llm-exhausted', model: this.model, attempts: 3, lastError })
+    this.log.error({ type: 'llm-exhausted', model: this.model, attempts: 5, lastError })
     return null
   }
 }
