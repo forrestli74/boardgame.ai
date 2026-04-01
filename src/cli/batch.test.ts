@@ -55,32 +55,33 @@ const baseOptions = {
 
 describe('generateGamePlans', () => {
   it('balance=none, groups=3 produces 3 plans without iteration', () => {
-    const plans = generateGamePlans(baseConfig, players, {
+    const { batchDir, plans } = generateGamePlans(baseConfig, players, {
       ...baseOptions,
       groups: 3,
       balance: 'none',
     })
 
+    expect(batchDir).toBe('output/avalon-20260330')
     expect(plans).toHaveLength(3)
-    expect(plans[0].gameId).toBe('avalon-20260330-0001')
-    expect(plans[1].gameId).toBe('avalon-20260330-0002')
-    expect(plans[2].gameId).toBe('avalon-20260330-0003')
+    expect(plans[0].gameId).toBe('0001')
+    expect(plans[1].gameId).toBe('0002')
+    expect(plans[2].gameId).toBe('0003')
     for (const plan of plans) {
       expect(plan.iteration).toBeUndefined()
     }
   })
 
   it('balance=rotate, groups=2, 3 players produces 6 plans', () => {
-    const plans = generateGamePlans(baseConfig, players, {
+    const { plans } = generateGamePlans(baseConfig, players, {
       ...baseOptions,
       groups: 2,
       balance: 'rotate',
     })
 
     expect(plans).toHaveLength(6) // 2 groups × 3 rotations
-    expect(plans[0].gameId).toBe('avalon-20260330-0001-001')
-    expect(plans[2].gameId).toBe('avalon-20260330-0001-003')
-    expect(plans[3].gameId).toBe('avalon-20260330-0002-001')
+    expect(plans[0].gameId).toBe('0001-001')
+    expect(plans[2].gameId).toBe('0001-003')
+    expect(plans[3].gameId).toBe('0002-001')
 
     // Verify rotations within group 1
     expect(plans[0].playerOrder.map((p) => p.name)).toEqual(['Alice', 'Bob', 'Carol'])
@@ -99,7 +100,7 @@ describe('generateGamePlans', () => {
       players: twoPlayers.map((p) => ({ name: p.name })),
     }
 
-    const plans = generateGamePlans(twoPlayerConfig, twoPlayers, {
+    const { plans } = generateGamePlans(twoPlayerConfig, twoPlayers, {
       ...baseOptions,
       groups: 1,
       balance: 'permute',
@@ -108,7 +109,7 @@ describe('generateGamePlans', () => {
     expect(plans).toHaveLength(2) // 1 group × 2!
     expect(plans[0].playerOrder.map((p) => p.name)).toEqual(['Alice', 'Bob'])
     expect(plans[1].playerOrder.map((p) => p.name)).toEqual(['Bob', 'Alice'])
-    expect(plans[0].gameId).toBe('avalon-20260330-0001-001')
-    expect(plans[1].gameId).toBe('avalon-20260330-0001-002')
+    expect(plans[0].gameId).toBe('0001-001')
+    expect(plans[1].gameId).toBe('0001-002')
   })
 })

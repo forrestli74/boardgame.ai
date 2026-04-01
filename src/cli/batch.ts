@@ -1,5 +1,6 @@
 import pLimit from 'p-limit'
 import { join } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { runGame, type RunGameHandle } from '../core/run-game.js'
 import type { Engine } from '../core/engine.js'
 import { createGame } from './game-registry.js'
@@ -65,15 +66,16 @@ export function generateGamePlans(
   config: GameConfig,
   players: ResolvedPlayer[],
   options: BatchOptions,
-): GamePlan[] {
+): { batchDir: string; plans: GamePlan[] } {
+  const batchDir = join(options.outputDir, `${config.game}-${options.date}`)
   const plans: GamePlan[] = []
 
   for (let g = 1; g <= options.groups; g++) {
     if (options.balance === 'none') {
-      const gameId = `${config.game}-${options.date}-${padGroup(g)}`
+      const gameId = padGroup(g)
       plans.push({
         gameId,
-        outputDir: join(options.outputDir, gameId),
+        outputDir: join(batchDir, gameId),
         playerOrder: players,
         group: g,
       })
@@ -84,10 +86,10 @@ export function generateGamePlans(
           : generatePermutations(players)
 
       for (let i = 0; i < orderings.length; i++) {
-        const gameId = `${config.game}-${options.date}-${padGroup(g)}-${padIter(i + 1)}`
+        const gameId = `${padGroup(g)}-${padIter(i + 1)}`
         plans.push({
           gameId,
-          outputDir: join(options.outputDir, gameId),
+          outputDir: join(batchDir, gameId),
           playerOrder: orderings[i],
           group: g,
           iteration: i + 1,
@@ -96,7 +98,7 @@ export function generateGamePlans(
     }
   }
 
-  return plans
+  return { batchDir, plans }
 }
 
 function toPlayerId(name: string): string {
@@ -108,7 +110,10 @@ export async function runBatch(
   players: ResolvedPlayer[],
   options: BatchOptions,
 ): Promise<BatchResult> {
-  const plans = generateGamePlans(config, players, options)
+  const { batchDir, plans } = generateGamePlans(config, players, options)
+  await mkdir(batchDir, { recursive: true })
+  await writeFile(join(batchDir, 'config.json'), JSON.stringify(config, null, 2) + '\n')
+
   const limit = pLimit(options.concurrency)
   const results: BatchResult['results'] = []
   const activeGames = new Map<string, Engine>()
